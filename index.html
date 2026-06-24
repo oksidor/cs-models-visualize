@@ -10,6 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700;800&family=Fira+Code:wght=400;500&display=swap" rel="stylesheet">
     <!-- D3 Library for Graph Visualizations -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <!-- Marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         /* Strict CSS guarantees to lock root viewports and eliminate body-wide elastic bounces */
         html, body {
@@ -80,6 +82,44 @@
             user-select: text !important;
             -webkit-user-select: text !important;
         }
+
+        /* Markdown Styles for Gemini Output */
+        .markdown-body {
+            font-size: 11px;
+            line-height: 1.6;
+            color: #334155;
+        }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+            color: #3730a3;
+            font-weight: 700;
+            margin-top: 0.75rem;
+            margin-bottom: 0.35rem;
+        }
+        .markdown-body p { margin-bottom: 0.6rem; }
+        .markdown-body ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.6rem; }
+        .markdown-body ol { list-style-type: decimal; padding-left: 1.25rem; margin-bottom: 0.6rem; }
+        .markdown-body code {
+            font-family: 'Fira Code', monospace;
+            background: #f1f5f9;
+            padding: 2px 4px;
+            border-radius: 4px;
+            color: #0284c7;
+        }
+        .markdown-body pre {
+            background: #f8fafc;
+            padding: 8px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 0.5rem 0;
+            border: 1px solid #e2e8f0;
+        }
+        .markdown-body pre code {
+            background: transparent;
+            padding: 0;
+            color: #334155;
+        }
+        .markdown-body strong { color: #0f172a; font-weight: 700; }
+        .markdown-body a { color: #4f46e5; text-decoration: underline; }
     </style>
 </head>
 <body class="text-slate-800 h-screen flex flex-col bg-slate-50 select-none">
@@ -256,9 +296,9 @@
             </div>
         </aside>
 
-        <!-- MIDDLE NETWORK VIEWPORT (Seamless, bounded adjacent space) -->
+        <!-- MIDDLE NETWORK VIEWPORT -->
         <main class="flex-1 flex flex-col relative bg-white min-h-0 z-10">
-            <!-- Floating Navigation Controls & Tracer Bar (Flush single row configuration, no overlaps) -->
+            <!-- Floating Navigation Controls & Tracer Bar (Flush single row configuration) -->
             <div id="top-controls-bar" class="absolute top-0 left-80 right-80 sm:right-[384px] h-12 bg-slate-50 border-b border-slate-200 z-20 flex items-center justify-between px-3 transition-all duration-300 select-none">
                 
                 <!-- Trace Panel (Left Aligned within the center controls area) -->
@@ -297,7 +337,7 @@
                 </div>
             </div>
 
-            <!-- Visualization Canvas SVG (Light Background Grid) - Offsets from Left & Right Sidebars configured dynamically -->
+            <!-- Visualization Canvas SVG (Light Background Grid) -->
             <div id="canvas-container" class="w-full flex-1 relative overflow-hidden bg-white mt-12">
                 <svg id="network-svg" class="w-full h-full cursor-grab active:cursor-grabbing"></svg>
                 
@@ -369,8 +409,47 @@
                             <p id="detail-desc" class="text-xs text-slate-600 leading-relaxed font-medium">Explanation about what the model defines.</p>
                         </div>
 
-                        <!-- Gemini LLM Schema Analyzer Block -->
-                        <div class="p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 space-y-2 shrink-0 select-none">
+                        <!-- Schema Builder Preview -->
+                        <div class="space-y-2 shrink-0">
+                            <div class="flex justify-between items-center">
+                                <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Fields Schema (Contentstack Mock)</h4>
+                                <span class="text-[9px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">Visual Builder</span>
+                            </div>
+                            <div id="detail-fields-list" class="space-y-1">
+                                <!-- Dynamic Contentstack Schema fields render here -->
+                            </div>
+                        </div>
+
+                        <!-- Schema Connections list -->
+                        <div class="space-y-2 shrink-0">
+                            <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Integrates With / Connections</h4>
+                            <div id="detail-connections" class="space-y-1.5">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- JSON Source View -->
+                        <div class="space-y-2 pt-2 border-t border-slate-100 flex-1 flex flex-col min-h-[285px] shrink-0">
+                            <div class="flex justify-between items-center shrink-0">
+                                <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Model JSON</h4>
+                                <div class="flex gap-1.5">
+                                    <button id="copy-select-btn" class="hidden text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-1 rounded-md transition duration-150 shadow-sm flex items-center gap-1">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        <span>Copy selection</span>
+                                    </button>
+                                    <button id="copy-json-btn" class="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-1 rounded-md transition duration-150 shadow-sm flex items-center gap-1">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        <span>Copy JSON</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="relative flex-1 min-h-[240px]">
+                                <pre class="bg-slate-50 text-slate-800 text-[10px] leading-relaxed p-2.5 rounded-xl overflow-auto h-full w-full code-font shadow-inner border border-slate-200 select-text min-h-[240px]"><code id="detail-json-code" class="select-text"></code></pre>
+                            </div>
+                        </div>
+
+                        <!-- Gemini LLM Schema Analyzer Block (Moved to bottom) -->
+                        <div class="p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 space-y-3 shrink-0 select-none mt-4">
                             <div class="flex items-center justify-between">
                                 <h4 class="text-[10px] font-extrabold text-indigo-700 uppercase tracking-widest flex items-center gap-1">
                                     <span class="animate-pulse">✨</span> Gemini AI Schema Copilot
@@ -397,52 +476,14 @@
                                 </button>
                             </div>
                             <!-- Gemini Streaming/Response Output Node -->
-                            <div id="gemini-output" class="hidden p-2 rounded-lg bg-slate-950 border border-slate-800 text-[10px] text-slate-100 font-sans leading-relaxed select-text select-all overflow-y-auto max-h-36 scrollable-content code-font">
-                                <div class="flex items-center gap-1.5 text-indigo-400 font-semibold mb-1 select-none">
+                            <div id="gemini-output" class="hidden p-3 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 overflow-y-auto max-h-56 scrollable-content shadow-inner">
+                                <div class="flex items-center gap-1.5 text-indigo-600 font-semibold mb-2 select-none text-[10px]">
                                     <span>🤖 Assistant:</span>
                                 </div>
-                                <div id="gemini-output-text" class="whitespace-pre-wrap select-text">Thinking...</div>
+                                <div id="gemini-output-text" class="markdown-body select-text">Thinking...</div>
                             </div>
                         </div>
 
-                        <!-- Schema Builder Preview -->
-                        <div class="space-y-2 shrink-0">
-                            <div class="flex justify-between items-center">
-                                <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Fields Schema (Contentstack Mock)</h4>
-                                <span class="text-[9px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">Visual Builder</span>
-                            </div>
-                            <div id="detail-fields-list" class="space-y-1">
-                                <!-- Dynamic Contentstack Schema fields render here -->
-                            </div>
-                        </div>
-
-                        <!-- Schema Connections list -->
-                        <div class="space-y-2 shrink-0">
-                            <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Integrates With / Connections</h4>
-                            <div id="detail-connections" class="space-y-1.5">
-                                <!-- Populated dynamically -->
-                            </div>
-                        </div>
-
-                        <!-- JSON Source View (Occupies flexibly all remaining height all the way to bottom metadata with an increased minimum height of at least 15-18 lines of text) -->
-                        <div class="space-y-2 pt-2 border-t border-slate-100 flex-1 flex flex-col min-h-[285px]">
-                            <div class="flex justify-between items-center shrink-0">
-                                <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">JSON source</h4>
-                                <div class="flex gap-1.5">
-                                    <button id="copy-select-btn" class="hidden text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-1 rounded-md transition duration-150 shadow-sm flex items-center gap-1">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                        <span>Copy selection</span>
-                                    </button>
-                                    <button id="copy-json-btn" class="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-1 rounded-md transition duration-150 shadow-sm flex items-center gap-1">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                        <span>Copy JSON</span>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="relative flex-1 min-h-[240px]">
-                                <pre class="bg-slate-900 text-slate-100 text-[10px] leading-relaxed p-2.5 rounded-xl overflow-auto h-full w-full code-font shadow-inner border border-slate-800 select-text min-h-[240px]"><code id="detail-json-code" class="select-text"></code></pre>
-                            </div>
-                        </div>
                     </div>
                     
                     <!-- Bottom Metadata Details -->
@@ -1031,9 +1072,10 @@
             if (outputBlock) outputBlock.classList.remove("hidden");
             if (outputText) outputText.innerHTML = `<span class="animate-pulse text-slate-400">Processing request via Gemini...</span>`;
 
-            const modelContextStr = JSON.stringify(selectedNode, null, 2);
+            // Uses realistic contentstack schema JSON for accurate LLM insight
+            const modelContextStr = JSON.stringify(generateContentstackJSON(selectedNode), null, 2);
             let prompt = "";
-            let systemPrompt = "You are an expert Contentstack Architect. Provide extremely concise, professional, architectural responses based solely on Contentstack content-modeling structures.";
+            let systemPrompt = "You are an expert Contentstack Architect. Provide extremely concise, professional, architectural responses based solely on Contentstack content-modeling structures. Use markdown formatting to style your response cleanly.";
 
             if (actionType === 'analyze') {
                 prompt = `Analyze this Contentstack Content Model schema. Point out any potential bottlenecks, architectural redundancies, or suggestions for frontend reusability:\n\n${modelContextStr}`;
@@ -1045,7 +1087,11 @@
 
             try {
                 const response = await callGemini(prompt, systemPrompt);
-                if (outputText) outputText.textContent = response;
+                if (outputText && window.marked) {
+                    outputText.innerHTML = marked.parse(response);
+                } else if (outputText) {
+                    outputText.textContent = response;
+                }
             } catch (err) {
                 if (outputText) outputText.innerHTML = `<span class="text-rose-500 font-semibold">⚠️ ${err.message}</span>`;
             }
@@ -1065,13 +1111,17 @@
             if (outputBlock) outputBlock.classList.remove("hidden");
             if (outputText) outputText.innerHTML = `<span class="animate-pulse text-slate-400">Consulting Gemini Copilot...</span>`;
 
-            const modelContextStr = JSON.stringify(selectedNode, null, 2);
+            const modelContextStr = JSON.stringify(generateContentstackJSON(selectedNode), null, 2);
             const prompt = `Selected Content Model Metadata:\n${modelContextStr}\n\nUser Question: ${chatQuery}`;
-            const systemPrompt = "You are an expert Contentstack Developer Assistant. Help the developer write frontend code, customize model relationships, or design optimal schema payloads.";
+            const systemPrompt = "You are an expert Contentstack Developer Assistant. Help the developer write frontend code, customize model relationships, or design optimal schema payloads. Use markdown to format code blocks and answers.";
 
             try {
                 const response = await callGemini(prompt, systemPrompt);
-                if (outputText) outputText.textContent = response;
+                if (outputText && window.marked) {
+                    outputText.innerHTML = marked.parse(response);
+                } else if (outputText) {
+                    outputText.textContent = response;
+                }
             } catch (err) {
                 if (outputText) outputText.innerHTML = `<span class="text-rose-500 font-semibold">⚠️ ${err.message}</span>`;
             }
@@ -1228,6 +1278,51 @@
             });
         }
 
+        // Realistic Contentstack JSON Schema Synthesizer
+        function generateContentstackJSON(m) {
+            if (!m) return {};
+            const schema = (m.fields || []).map(f => {
+                let fieldDef = {
+                    display_name: f.label || f.name,
+                    uid: f.name,
+                    data_type: f.type === 'Text' ? 'text' : f.type === 'Group' ? 'group' : f.type === 'Boolean' ? 'boolean' : f.type === 'Select' ? 'text' : f.type === 'Asset' ? 'file' : f.type === 'Reference' ? 'reference' : f.type === 'Modular Block' ? 'blocks' : f.type === 'Global Field' ? 'global_field' : 'text',
+                    mandatory: f.required || false,
+                    unique: false,
+                    field_metadata: {
+                        description: "",
+                        default_value: ""
+                    },
+                    multiple: false
+                };
+                if (f.type === "Reference") {
+                    fieldDef.reference_to = [f.target];
+                } else if (f.type === "Global Field") {
+                    fieldDef.reference_to = f.target;
+                } else if (f.type === "Modular Block") {
+                    fieldDef.blocks = [{ title: f.target, uid: f.target, reference_to: f.target }];
+                }
+                return fieldDef;
+            });
+
+            return {
+                content_type: {
+                    title: m.name,
+                    uid: m.id,
+                    schema: schema,
+                    options: {
+                        title: "title",
+                        publishable: true,
+                        is_page: m.type === 'page',
+                        singleton: false,
+                        sub_title: [],
+                        url_pattern: m.type === 'page' ? "/:title" : ""
+                    },
+                    description: m.description || "",
+                    maintain_revisions: true
+                }
+            };
+        }
+
         // Update dashboard counter displays
         function updateStatsCounters() {
             if (dirCount) dirCount.textContent = contentModels.length;
@@ -1312,6 +1407,10 @@
                 if (chevron) chevron.classList.remove("rotate-180");
             }
 
+            if (topControlsBar) {
+                topControlsBar.style.left = leftSidebarOpen ? "320px" : "0px";
+            }
+
             setTimeout(updateSimulationCenter, 310);
         }
 
@@ -1343,6 +1442,10 @@
                 if (content) content.classList.add("hidden");
                 // Collapsed -> invite to expand by pointing DOWN
                 if (chevron) chevron.classList.remove("rotate-180");
+            }
+
+            if (topControlsBar) {
+                topControlsBar.style.right = rightSidebarOpen ? "384px" : "0px";
             }
 
             setTimeout(updateSimulationCenter, 310);
@@ -1637,17 +1740,17 @@
             }
             json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
-                let cls = 'text-amber-400'; // Default number / boolean values (Amber)
+                let cls = 'text-amber-600'; // Default number / boolean values (Amber)
                 if (/^"/.test(match)) {
                     if (/:$/.test(match)) {
-                        cls = 'text-indigo-300 font-semibold'; // Key properties (Indigo)
+                        cls = 'text-indigo-700 font-semibold'; // Key properties (Indigo)
                     } else {
-                        cls = 'text-emerald-400'; // String values (Emerald)
+                        cls = 'text-emerald-600'; // String values (Emerald)
                     }
                 } else if (/true|false/.test(match)) {
-                    cls = 'text-sky-400 font-semibold';
+                    cls = 'text-sky-600 font-semibold';
                 } else if (/null/.test(match)) {
-                    cls = 'text-rose-400';
+                    cls = 'text-rose-600';
                 }
                 return '<span class="' + cls + '">' + match + '</span>';
             });
@@ -1852,7 +1955,8 @@
 
             const jsonCodeElement = document.getElementById("detail-json-code");
             if (jsonCodeElement) {
-                jsonCodeElement.innerHTML = syntaxHighlightJson(model);
+                // Renders the original cleaned Contentstack Schema JSON
+                jsonCodeElement.innerHTML = syntaxHighlightJson(generateContentstackJSON(model));
             }
 
             toggleRightSidebar(true);
@@ -1889,12 +1993,14 @@
             document.body.removeChild(textarea);
         }
 
+        // Copy Selected Content Model JSON parameters to clipboard with premium theme styles
         function copySelectedNodeJson() {
             if (!selectedNode) return;
-            const textToCopy = JSON.stringify(selectedNode, null, 2);
+            const textToCopy = JSON.stringify(generateContentstackJSON(selectedNode), null, 2);
             
+            // Generate full formatted syntax block for Copy JSON
             const highlighted = syntaxHighlightJson(textToCopy);
-            const richHtml = `<pre style="background-color:#0f172a;color:#f8fafc;padding:12px;border-radius:8px;font-family:'Fira Code',monospace;font-size:12px;line-height:1.5;"><code>${highlighted}</code></pre>`;
+            const richHtml = `<pre style="background-color:#f8fafc;color:#0f172a;padding:12px;border-radius:8px;font-family:'Fira Code',monospace;font-size:12px;line-height:1.5;border:1px solid #e2e8f0;"><code>${highlighted}</code></pre>`;
             
             const onCopy = (e) => {
                 e.clipboardData.setData('text/plain', textToCopy);
@@ -1906,6 +2012,7 @@
             document.execCommand('copy');
             document.removeEventListener('copy', onCopy);
 
+            // Display Copied State
             const copyJsonBtn = document.getElementById("copy-json-btn");
             if (copyJsonBtn) {
                 const originalText = copyJsonBtn.innerHTML;
@@ -1923,11 +2030,14 @@
             }
         }
 
+        // Copy highlighted text selection inside code block as a clean code string, not nested blocks
         function copySelectedNodeSelection() {
             const selection = window.getSelection();
             if (!selection || selection.isCollapsed) return;
 
             const selectedText = selection.toString();
+            
+            // Build the clean code string styling for simple paste contexts (Slack, Teams, Confluence)
             const richHtml = `<code style="font-family:'Fira Code',monospace;font-size:11px;background-color:#f1f5f9;color:#0f172a;padding:2px 4px;border-radius:4px;white-space:pre-wrap;">${selectedText.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code>`;
 
             const onCopy = (e) => {
@@ -1940,6 +2050,7 @@
             document.execCommand('copy');
             document.removeEventListener('copy', onCopy);
 
+            // Show temporary success state
             const copySelectBtn = document.getElementById("copy-select-btn");
             if (copySelectBtn) {
                 const originalHtml = copySelectBtn.innerHTML;
