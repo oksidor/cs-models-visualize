@@ -1,0 +1,2305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contentstack Schema Visualizer & Interactive Model Mapper</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter & Fira Code Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700;800&family=Fira+Code:wght=400;500&display=swap" rel="stylesheet">
+    <!-- D3 Library for Graph Visualizations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        /* Strict CSS guarantees to lock root viewports and eliminate body-wide elastic bounces */
+        html, body {
+            height: 100%;
+            height: -webkit-fill-available;
+            margin: 0;
+            padding: 0;
+            overflow: hidden !important;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            left: 0;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #ffffff;
+        }
+        .code-font {
+            font-family: 'Fira Code', monospace;
+        }
+        /* Lock scroll propagation specifically inside dynamic blocks */
+        .scrollable-content {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch; /* Momentum scrolling */
+            overscroll-behavior: contain; /* Traps scrolls, stopping elastic page bounces completely */
+        }
+        /* Custom scrollbar optimized for light mode */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Pulse Animation for active trace paths */
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -40;
+            }
+        }
+        .active-path {
+            stroke-dasharray: 8, 4;
+            animation: dash 1.5s linear infinite;
+        }
+        /* Tooltip style */
+        .node-tooltip {
+            position: absolute;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            z-index: 50;
+        }
+        /* SVG Labels Halo for exceptional contrast over connection lines */
+        .labels text {
+            text-shadow: 0 2px 0 #fff, 2px 0 0 #fff, 0 -2px 0 #fff, -2px 0 0 #fff,
+                         1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
+            fill: #0f172a;
+            font-weight: 600;
+        }
+        /* Explicit Selection Support for inspector code views */
+        .select-text {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+        }
+    </style>
+</head>
+<body class="text-slate-800 h-screen flex flex-col bg-slate-50 select-none">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="border-b border-slate-200 bg-white px-4 py-2 flex flex-col shrink-0 shadow-sm z-30">
+        <div class="flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-indigo-600 rounded-lg shadow-lg shadow-indigo-500/10 text-white shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h1 class="text-sm md:text-base font-extrabold text-slate-900 leading-tight">Content Model Explorer</h1>
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-800 border border-slate-200">
+                            source: content-model.zip
+                        </span>
+                    </div>
+                    <p class="text-[10px] md:text-xs text-slate-500">Interactive schema map & relationship pathfinder</p>
+                </div>
+            </div>
+
+            <!-- Dashboard Stats Widget & Top Relationship Legend -->
+            <div class="hidden sm:flex items-center gap-5 text-xs text-slate-600">
+                <!-- Relocated Legend from Left Sidebar to Master Header -->
+                <div class="flex items-center gap-3 border-r border-slate-200 pr-5">
+                    <div class="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+                        <span class="w-3 h-1 bg-indigo-500 rounded block"></span>
+                        <span>Reference</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
+                        <span class="w-3 h-1 bg-rose-500 rounded block"></span>
+                        <span>Global Field</span>
+                    </div>
+                </div>
+
+                <!-- Stats Counters -->
+                <div class="flex flex-col border-l border-slate-100 pl-3">
+                    <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Models</span>
+                    <span id="stat-total-models" class="text-xs md:text-sm font-extrabold text-indigo-600">0</span>
+                </div>
+                <div class="flex flex-col border-l border-slate-200 pl-3">
+                    <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Components</span>
+                    <span id="stat-content-types" class="text-xs md:text-sm font-extrabold text-emerald-600">0</span>
+                </div>
+                <div class="flex flex-col border-l border-slate-200 pl-3">
+                    <span class="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Connections</span>
+                    <span id="stat-relations" class="text-xs md:text-sm font-extrabold text-amber-600">0</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN BODY GRID -->
+    <div class="flex-1 flex overflow-hidden relative min-h-0">
+
+        <!-- LEFT CONTROL & LIST SIDEBAR -->
+        <aside id="sidebar-panel" class="absolute left-0 top-0 z-20 w-80 bg-white border-r border-slate-200 flex flex-col overflow-hidden transition-all duration-300" style="height: 100%;">
+            <!-- Sidebar Header (Permanent Title exactly at 48px height) -->
+            <div onclick="toggleLeftSidebar()" class="h-12 px-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0 cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                <span class="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Directory</span>
+                <button class="p-1 hover:bg-slate-200 rounded-lg transition-colors text-slate-500" aria-label="Toggle Directory Content">
+                    <!-- Point up when expanded (default state), point down when collapsed -->
+                    <svg id="left-chevron-icon" class="w-4 h-4 transition-transform duration-300 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+            </div>
+
+            <!-- Left Panel Collapsible Body Content -->
+            <div id="sidebar-content" class="flex-1 flex flex-col overflow-hidden min-h-0 transition-all duration-300">
+                <!-- Search & Filter Controls -->
+                <div class="p-3 border-b border-slate-100 space-y-3 shrink-0 bg-slate-50/50">
+                    <div class="relative">
+                        <input type="text" id="search-input" placeholder="Search Content Models..." class="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 pl-9 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-colors shadow-sm">
+                        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+
+                    <div class="space-y-1">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Filter by Entity Type</span>
+                                <!-- Keyboard shortcuts helper trigger -->
+                                <div class="relative group inline-block">
+                                    <button class="text-slate-400 hover:text-slate-600 cursor-help p-0.5 rounded transition" aria-label="Keyboard Shortcuts Info">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    </button>
+                                    <div class="absolute left-6 top-0 w-56 bg-slate-900 text-white text-[10px] p-2 rounded-lg shadow-xl opacity-0 pointer-events-none group-hover:opacity-100 transition duration-200 z-50 leading-relaxed">
+                                        <span class="font-bold text-indigo-300 block mb-1">Keyboard Modifiers Guide:</span>
+                                        • <kbd class="bg-slate-800 text-[9px] px-1 rounded font-mono">Alt / Option-Click</kbd>: Solo select category.<br>
+                                        • <kbd class="bg-slate-800 text-[9px] px-1 rounded font-mono">Shift-Click</kbd>: Select span / range.<br>
+                                        • <kbd class="bg-slate-800 text-[9px] px-1 rounded font-mono">Cmd / Ctrl-Click</kbd>: Add or remove toggle.
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <button id="filter-all" class="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 transition">Select All</button>
+                                <span class="text-slate-300 text-[9px] font-bold">|</span>
+                                <button id="filter-none" class="text-[9px] font-bold text-rose-600 hover:text-rose-800 transition">Clear All</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Multi-select Filter Pills Grid -->
+                        <div class="grid grid-cols-1 gap-1" id="category-filter-pills">
+                            <!-- Pages Pill -->
+                            <button data-type="page" class="filter-pill flex items-center justify-between px-3 py-1 text-[11px] rounded-lg border-[0.75px] bg-white border-slate-200 text-slate-700 hover:border-emerald-300 hover:bg-emerald-50/30 transition-all font-semibold font-sans">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 border border-emerald-600/10"></span>
+                                    <span>Pages (Templates)</span>
+                                </div>
+                                <span id="count-page" class="px-1 py-0.5 rounded bg-slate-100 text-[9px] text-slate-600 font-bold border border-slate-200">0</span>
+                            </button>
+
+                            <!-- Structures Pill -->
+                            <button data-type="structural" class="filter-pill flex items-center justify-between px-3 py-1 text-[11px] rounded-lg border-[0.75px] bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-blue-50/30 transition-all font-semibold font-sans">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-blue-500 border border-blue-600/10"></span>
+                                    <span>Structures (Containers)</span>
+                                </div>
+                                <span id="count-structural" class="px-1 py-0.5 rounded bg-slate-100 text-[9px] text-slate-600 font-bold border border-slate-200">0</span>
+                            </button>
+
+                            <!-- Component Views Pill -->
+                            <button data-type="component" class="filter-pill flex items-center justify-between px-3 py-1 text-[11px] rounded-lg border-[0.75px] bg-white border-slate-200 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50/30 transition-all font-semibold font-sans">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 border border-indigo-600/10"></span>
+                                    <span>Views (Components)</span>
+                                </div>
+                                <span id="count-component" class="px-1 py-0.5 rounded bg-slate-100 text-[9px] text-slate-600 font-bold border border-slate-200">0</span>
+                            </button>
+
+                            <!-- SEO Pill -->
+                            <button data-type="seo" class="filter-pill flex items-center justify-between px-3 py-1 text-[11px] rounded-lg border-[0.75px] bg-white border-slate-200 text-slate-700 hover:border-purple-300 hover:bg-purple-50/30 transition-all font-semibold font-sans">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-purple-500 border border-purple-600/10"></span>
+                                    <span>SEO & Metadata</span>
+                                </div>
+                                <span id="count-seo" class="px-1 py-0.5 rounded bg-slate-100 text-[9px] text-slate-600 font-bold border border-slate-200">0</span>
+                            </button>
+
+                            <!-- Global Fields Pill -->
+                            <button data-type="global_field" class="filter-pill flex items-center justify-between px-3 py-1 text-[11px] rounded-lg border-[0.75px] bg-white border-slate-200 text-slate-700 hover:border-rose-300 hover:bg-rose-50/30 transition-all font-semibold font-sans">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500 border border-rose-600/10"></span>
+                                    <span>Global Fields</span>
+                                </div>
+                                <span id="count-global_field" class="px-1 py-0.5 rounded bg-slate-100 text-[9px] text-slate-600 font-bold border border-slate-200">0</span>
+                            </button>
+
+                            <!-- Utility System Schema Pill -->
+                            <button data-type="utility" class="filter-pill flex items-center justify-between px-3 py-1 text-[11px] rounded-lg border-[0.75px] bg-white border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-slate-100 transition-all font-semibold font-sans">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-slate-500 border border-slate-600/10"></span>
+                                    <span>System / Utilities</span>
+                                </div>
+                                <span id="count-utility" class="px-1 py-0.5 rounded bg-slate-100 text-[9px] text-slate-600 font-bold border border-slate-200">0</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Model Directory List -->
+                <div class="flex-1 min-h-0 p-3 space-y-2.5 scrollable-content bg-white">
+                    <div>
+                        <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 flex items-center justify-between">
+                            <span>Directory list</span>
+                            <span id="directory-count" class="px-1.5 py-0.5 rounded bg-slate-100 text-[9px] text-slate-600 border border-slate-200 font-bold">0</span>
+                        </h3>
+                        <div id="directory-list" class="space-y-1">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MIDDLE NETWORK VIEWPORT (Seamless, bounded adjacent space) -->
+        <main class="flex-1 flex flex-col relative bg-white min-h-0 z-10">
+            <!-- Floating Navigation Controls & Tracer Bar (Flush single row configuration, no overlaps) -->
+            <div id="top-controls-bar" class="absolute top-0 left-80 right-80 sm:right-[384px] h-12 bg-slate-50 border-b border-slate-200 z-20 flex items-center justify-between px-3 transition-all duration-300 select-none">
+                
+                <!-- Trace Panel (Left Aligned within the center controls area) -->
+                <div class="bg-white border border-slate-200 p-1.5 rounded-xl flex items-center gap-1.5 shadow-sm">
+                    <button id="trace-btn" class="bg-slate-300 text-slate-500 opacity-50 cursor-not-allowed font-extrabold text-[10px] px-1.5 py-0.5 rounded transition flex items-center justify-center text-center leading-tight w-16 shrink-0" disabled>
+                        Trace Route
+                    </button>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <select id="trace-source" class="bg-slate-50 border border-slate-200 text-[11px] rounded px-1.5 py-1 max-w-[120px] focus:outline-none focus:border-indigo-500 text-slate-800">
+                            <!-- Options filled dynamically -->
+                        </select>
+                        <span class="text-slate-400 text-[11px] font-bold">➔</span>
+                        <select id="trace-target" class="bg-slate-50 border border-slate-200 text-[11px] rounded px-1.5 py-1 max-w-[120px] focus:outline-none focus:border-indigo-500 text-slate-800">
+                            <!-- Options filled dynamically -->
+                        </select>
+                    </div>
+                    <button id="trace-reset" class="bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] px-2 py-1 rounded border border-slate-200 transition hidden shrink-0">
+                        Reset
+                    </button>
+                </div>
+
+                <!-- Canvas Control Buttons (Right Aligned within the center controls area) -->
+                <div class="bg-white border border-slate-200 p-1 rounded-lg flex gap-0.5 shadow-sm shrink-0">
+                    <button id="zoom-in" title="Zoom In" class="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-800 transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    </button>
+                    <button id="zoom-out" title="Zoom Out" class="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-800 transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
+                    </button>
+                    <!-- Reset Zoom Button: Rendered with an arched arrow pointing back to origin d-path (↩️) -->
+                    <button id="zoom-fit" title="Reset Zoom" class="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-800 transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a5 5 0 015 5v1a5 5 0 01-5 5h-2M3 10l5-5m-5 5l5 5" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Visualization Canvas SVG (Light Background Grid) - Offsets from Left & Right Sidebars configured dynamically -->
+            <div id="canvas-container" class="w-full flex-1 relative overflow-hidden bg-white mt-12">
+                <svg id="network-svg" class="w-full h-full cursor-grab active:cursor-grabbing"></svg>
+                
+                <!-- Floating Active Filter Toast -->
+                <div id="filter-toast" class="absolute bottom-4 left-4 bg-slate-900 text-white text-xs px-3.5 py-1.5 rounded-xl shadow-lg flex items-center gap-2 transition-all duration-300 opacity-0 pointer-events-none z-20 border border-slate-700/50">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="filter-toast-text">Filters active</span>
+                </div>
+            </div>
+
+            <!-- Interactive Quick Guidance overlay -->
+            <div id="quick-tip-bar" class="bg-slate-50 border-t border-slate-200 p-2 flex justify-between items-center text-[11px] text-slate-500 shrink-0">
+                <div class="flex items-center gap-1.5 font-medium">
+                    <kbd class="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-slate-700 shadow-sm hidden sm:inline-block">Drag</kbd> nodes to layout. 
+                    <kbd class="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-slate-700 shadow-sm hidden sm:inline-block">Double click</kbd> to unpin.
+                </div>
+                <div class="font-medium">Click any node to inspect structure.</div>
+            </div>
+        </main>
+
+        <!-- RIGHT SCHEMAS & DETAILS PANEL -->
+        <aside id="details-panel" class="absolute right-0 top-0 z-20 w-80 sm:w-[384px] bg-white border-l border-slate-200 flex flex-col overflow-hidden transition-all duration-300" style="height: 100%;">
+            <!-- Sidebar Header (Permanent Title matching Top Row exactly at 48px height) -->
+            <div onclick="toggleRightSidebar()" class="h-12 px-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0 cursor-pointer hover:bg-slate-100 transition-colors select-none">
+                <span class="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Details</span>
+                <button class="p-1 hover:bg-slate-200 rounded-lg transition-colors text-slate-500" aria-label="Toggle Details Content">
+                    <!-- Point up when expanded (default state), point down when collapsed -->
+                    <svg id="right-chevron-icon" class="w-4 h-4 transition-transform duration-300 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+            </div>
+
+            <!-- Right Panel Collapsible Body Content -->
+            <div id="details-content" class="flex-1 flex flex-col overflow-hidden min-h-0 transition-all duration-300">
+                <!-- Default Placeholder Details -->
+                <div id="details-placeholder" class="p-4 text-center space-y-3.5 my-auto flex flex-col items-center justify-center h-full">
+                    <div class="p-3 bg-indigo-50 rounded-full text-indigo-600 border border-indigo-100">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
+                    </div>
+                    <h3 class="text-sm font-bold text-slate-800">Select a Model</h3>
+                    <p class="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">Click any node on the canvas or card in the directory list to examine dynamic parameters, connected elements, and use Gemini LLM Analysis.</p>
+                </div>
+
+                <!-- Active Content Details Container (Hidden by default) -->
+                <div id="details-active" class="hidden flex-1 flex flex-col overflow-hidden">
+                    <!-- Selected Node Metadata -->
+                    <div class="p-3 border-b border-slate-200 bg-slate-50 flex flex-col items-start shrink-0">
+                        <div class="flex items-center gap-1.5 mb-1.5">
+                            <span id="detail-category" class="inline-block px-1.5 py-0.5 text-[9px] font-bold uppercase rounded tracking-wider bg-white text-indigo-600 border border-indigo-100">Category</span>
+                            <span class="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded text-slate-500 bg-slate-100 border border-slate-200" title="Total Connections">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                                <span id="detail-connections-count">0</span>
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <h2 id="detail-title" class="text-sm font-extrabold text-slate-900 hover:text-indigo-600 cursor-pointer transition duration-150 truncate" title="Click to copy title">Content Model Title</h2>
+                            <button id="copy-title-btn" class="p-1 hover:bg-indigo-50 hover:text-indigo-600 rounded text-slate-400 transition" title="Copy title to clipboard">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
+                            <span id="copy-toast-badge" class="hidden text-[9px] bg-emerald-500 text-white font-bold px-1.5 py-0.5 rounded animate-bounce">Copied!</span>
+                        </div>
+                        <p id="detail-path" class="text-[10px] text-slate-400 code-font break-all font-medium mt-1">content_types/file_name.json</p>
+                    </div>
+
+                    <!-- Schema visual breakdown body -->
+                    <div class="p-3 flex-1 min-h-0 space-y-4 scrollable-content bg-white select-none flex flex-col">
+                        <!-- Description -->
+                        <div class="space-y-0.5 shrink-0">
+                            <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Description / Use-case</h4>
+                            <p id="detail-desc" class="text-xs text-slate-600 leading-relaxed font-medium">Explanation about what the model defines.</p>
+                        </div>
+
+                        <!-- Gemini LLM Schema Analyzer Block -->
+                        <div class="p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 space-y-2 shrink-0 select-none">
+                            <div class="flex items-center justify-between">
+                                <h4 class="text-[10px] font-extrabold text-indigo-700 uppercase tracking-widest flex items-center gap-1">
+                                    <span class="animate-pulse">✨</span> Gemini AI Schema Copilot
+                                </h4>
+                                <span class="text-[9px] font-semibold text-purple-700 bg-purple-50 border border-purple-200/50 px-1.5 py-0.5 rounded">gemini-2.5-flash</span>
+                            </div>
+                            <!-- Action Helpers -->
+                            <div class="grid grid-cols-3 gap-1">
+                                <button onclick="triggerGeminiAction('analyze')" class="text-[9px] font-bold text-indigo-700 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded px-1 py-1 transition duration-150">
+                                    Analyze
+                                </button>
+                                <button onclick="triggerGeminiAction('mock')" class="text-[9px] font-bold text-indigo-700 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded px-1 py-1 transition duration-150">
+                                    Mock Data
+                                </button>
+                                <button onclick="triggerGeminiAction('suggest')" class="text-[9px] font-bold text-indigo-700 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded px-1 py-1 transition duration-150">
+                                    Suggest Fields
+                                </button>
+                            </div>
+                            <!-- Custom Prompt Box -->
+                            <div class="flex gap-1">
+                                <input type="text" id="gemini-input" placeholder="Ask Gemini about this model..." class="flex-1 bg-white border border-indigo-200 rounded-lg px-2.5 py-1 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-colors">
+                                <button id="gemini-submit" onclick="submitGeminiChat()" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-2.5 py-1 text-xs font-bold transition">
+                                    Send
+                                </button>
+                            </div>
+                            <!-- Gemini Streaming/Response Output Node -->
+                            <div id="gemini-output" class="hidden p-2 rounded-lg bg-slate-950 border border-slate-800 text-[10px] text-slate-100 font-sans leading-relaxed select-text select-all overflow-y-auto max-h-36 scrollable-content code-font">
+                                <div class="flex items-center gap-1.5 text-indigo-400 font-semibold mb-1 select-none">
+                                    <span>🤖 Assistant:</span>
+                                </div>
+                                <div id="gemini-output-text" class="whitespace-pre-wrap select-text">Thinking...</div>
+                            </div>
+                        </div>
+
+                        <!-- Schema Builder Preview -->
+                        <div class="space-y-2 shrink-0">
+                            <div class="flex justify-between items-center">
+                                <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Fields Schema (Contentstack Mock)</h4>
+                                <span class="text-[9px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">Visual Builder</span>
+                            </div>
+                            <div id="detail-fields-list" class="space-y-1">
+                                <!-- Dynamic Contentstack Schema fields render here -->
+                            </div>
+                        </div>
+
+                        <!-- Schema Connections list -->
+                        <div class="space-y-2 shrink-0">
+                            <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Integrates With / Connections</h4>
+                            <div id="detail-connections" class="space-y-1.5">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- JSON Source View (Occupies flexibly all remaining height all the way to bottom metadata with an increased minimum height of at least 15-18 lines of text) -->
+                        <div class="space-y-2 pt-2 border-t border-slate-100 flex-1 flex flex-col min-h-[285px]">
+                            <div class="flex justify-between items-center shrink-0">
+                                <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">JSON source</h4>
+                                <div class="flex gap-1.5">
+                                    <button id="copy-select-btn" class="hidden text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-1 rounded-md transition duration-150 shadow-sm flex items-center gap-1">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        <span>Copy selection</span>
+                                    </button>
+                                    <button id="copy-json-btn" class="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-1 rounded-md transition duration-150 shadow-sm flex items-center gap-1">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        <span>Copy JSON</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="relative flex-1 min-h-[240px]">
+                                <pre class="bg-slate-900 text-slate-100 text-[10px] leading-relaxed p-2.5 rounded-xl overflow-auto h-full w-full code-font shadow-inner border border-slate-800 select-text min-h-[240px]"><code id="detail-json-code" class="select-text"></code></pre>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bottom Metadata Details -->
+                    <div class="p-3 border-t border-slate-200 bg-slate-50 text-[11px] flex justify-between items-center text-slate-500 font-medium shrink-0">
+                        <span>Validation State:</span>
+                        <span class="text-emerald-600 flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Ready / Active
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Node Hover Tooltip -->
+    <div id="node-tooltip" class="node-tooltip bg-white border border-slate-200 p-3 rounded-lg shadow-xl text-xs max-w-xs opacity-0 pointer-events-none">
+        <h4 id="tooltip-title" class="font-bold text-slate-900">Model Title</h4>
+        <p id="tooltip-cat" class="text-[10px] font-bold text-indigo-600 uppercase tracking-wide mt-0.5 mb-1.5">Page Template</p>
+        <p id="tooltip-desc" class="text-slate-600 leading-relaxed">Brief dynamic summary...</p>
+    </div>
+
+    <!-- MAIN APPLICATION SCRIPT -->
+    <script>
+        // Global Datastores
+        const contentModels = [
+            // PAGE TEMPLATES
+            {
+                id: "catalogue_page",
+                name: "Catalogue Page",
+                path: "content_types/catalogue_page.json",
+                type: "page",
+                description: "Primary template for product collections and catalog indexes. Orchestrates lists of categories and renders product landing elements.",
+                fields: [
+                    { name: "title", label: "Title", type: "Text", required: true },
+                    { name: "url", label: "URL Path", type: "Text", required: true },
+                    { name: "seo_data", label: "SEO Config", type: "Reference", target: "seo_page_data" },
+                    { name: "content_blocks", label: "Main Content Grid", type: "Modular Block", target: "catalogue_page_content" }
+                ]
+            },
+            {
+                id: "pdp_page",
+                name: "Product Detail Page",
+                path: "content_types/pdp_page.json",
+                type: "page",
+                description: "The PDP master layout. Defines settings, global widgets, templates, and content scopes specific to product description flows.",
+                fields: [
+                    { name: "title", label: "Page Identifier", type: "Text", required: true },
+                    { name: "pdp_content_blocks", label: "PDP Content Blocks", type: "Reference", target: "pdp_content" },
+                    { name: "global_template", label: "SEO Template config", type: "Reference", target: "seo_pdp_global_template" },
+                    { name: "pdp_global_settings", label: "PDP Global Items", type: "Reference", target: "pdp_global_items" }
+                ]
+            },
+            {
+                id: "gift_card_page",
+                name: "Gift Card Page",
+                path: "content_types/gift_card_page.json",
+                type: "page",
+                description: "Landing content and pricing structure mapping for digital and physical corporate gift voucher assets.",
+                fields: [
+                    { name: "title", label: "Title", type: "Text", required: true },
+                    { name: "pricing_matrix", label: "Gift Cards Structure", type: "Group" },
+                    { name: "seo", label: "SEO", type: "Reference", target: "seo_page_data" },
+                    { name: "banner", label: "Intro Banner", type: "Reference", target: "hero_view" }
+                ]
+            },
+            {
+                id: "content_page",
+                name: "Standard Content Page",
+                path: "content_types/content_page.json",
+                type: "page",
+                description: "General-purpose editorial page layout (e.g., About Us, Sustainability) combining nested hero blocks and flexible copy views.",
+                fields: [
+                    { name: "title", label: "Title", type: "Text" },
+                    { name: "url", label: "URL Schema", type: "Text" },
+                    { name: "seo", label: "SEO Meta", type: "Reference", target: "seo_page_data" },
+                    { name: "layout_blocks", label: "Visual Blocks", type: "Modular Block", target: "hero_view" }
+                ]
+            },
+
+            // STRUCTURAL / CONTAINERS
+            {
+                id: "catalogue_page_content",
+                name: "Catalogue Content Block",
+                path: "content_types/catalogue_page_content.json",
+                type: "structural",
+                description: "Intermediate orchestration schema collecting multi-view components shown on custom collection and catalogue views.",
+                fields: [
+                    { name: "hero_banners", label: "Highlight Heroes", type: "Reference", target: "hero_view" },
+                    { name: "dynamic_promos", label: "Promotional Banner Blocks", type: "Reference", target: "promo_view" },
+                    { name: "category_nodes", label: "Category Cards Array", type: "Reference", target: "category_cards_view" },
+                    { name: "product_showcases", label: "Interactive Product Grids", type: "Reference", target: "product_grid_view" }
+                ]
+            },
+            {
+                id: "pdp_content",
+                name: "PDP Content Container",
+                path: "content_types/pdp_content.json",
+                type: "structural",
+                description: "A nested layout controller mapping modular items, banner configurations, and spots specifically around the Product Detail details.",
+                fields: [
+                    { name: "promotional_banner", label: "Top Shipping Banners", type: "Reference", target: "pdp_shipping_banner_view" },
+                    { name: "payment_messages", label: "Payment Promos", type: "Reference", target: "pdp_payment_message" },
+                    { name: "recommendations_spot", label: "Detail Add-to-bag spots", type: "Reference", target: "pdp_content_spot_atb_view" }
+                ]
+            },
+            {
+                id: "site_global_items",
+                name: "Global Site Settings",
+                path: "content_types/site_global_items.json",
+                type: "structural",
+                description: "Primary configuration schema managing global layouts like main navigation headers, footer columns, theme controls and tracking scripts.",
+                fields: [
+                    { name: "header_layout", label: "Site Header", type: "Reference", target: "header_view" },
+                    { name: "footer_layout", label: "Site Footer", type: "Reference", target: "footer_view" },
+                    { name: "branding_theme", label: "Visual Theme Settings", type: "Global Field", target: "theme" },
+                    { name: "app_globals", label: "Core Utility Globals", type: "Reference", target: "app_global" }
+                ]
+            },
+            {
+                id: "header_view",
+                name: "Header View Component",
+                path: "content_types/header_view.json",
+                type: "component",
+                description: "Defines the site's main navigation bars, logos, dynamic drop-down mega menu architectures, and quick-search triggers.",
+                fields: [
+                    { name: "config", label: "Structural Configuration", type: "Reference", target: "header_config" },
+                    { name: "navigation_menu", label: "Main Navigation Items", type: "Reference", target: "menu_links_view" },
+                    { name: "drop_navigation", label: "Mega Menu Dropdown", type: "Reference", target: "drop_navigation_view" },
+                    { name: "theme_override", label: "Sub theme selection", type: "Global Field", target: "sub_theme" }
+                ]
+            },
+            {
+                id: "footer_view",
+                name: "Footer View Component",
+                path: "content_types/footer_view.json",
+                type: "component",
+                description: "Site footer manager rendering multi-column hyperlinks, site copyrights, policies and subscription utilities.",
+                fields: [
+                    { name: "newsletter_form", label: "Footer newsletter module", type: "Reference", target: "newsletter_footer_signup_view" },
+                    { name: "links_grid", label: "Footer Link Groups", type: "Reference", target: "hyperlink" },
+                    { name: "view_alignment", label: "Visual Layout Align", type: "Global Field", target: "view_types" }
+                ]
+            },
+
+            // VIEWS / GRAPHICS
+            {
+                id: "hero_view",
+                name: "Hero Banner Component",
+                path: "content_types/hero_view.json",
+                type: "component",
+                description: "Large showcase image/video element with customizable text positioning, responsive aspect ratios, and conversion action buttons.",
+                fields: [
+                    { name: "title", label: "Internal Title", type: "Text" },
+                    { name: "text_align", label: "Text Layout alignment", type: "Global Field", target: "text_alignment" },
+                    { name: "background_image", label: "Desktop & Mobile media", type: "Global Field", target: "responsive_image" },
+                    { name: "button_cta", label: "Call to action details", type: "Global Field", target: "cta" },
+                    { name: "section_settings", label: "Section Spacing Layout", type: "Global Field", target: "wrapper_settings" }
+                ]
+            },
+            {
+                id: "promo_view",
+                name: "Promotion Grid View",
+                path: "content_types/promo_view.json",
+                type: "component",
+                description: "Multi-functional marketing banner designed to feature promo flags, rich descriptions, links to category indices and signups.",
+                fields: [
+                    { name: "header_label", label: "Promo Label", type: "Global Field", target: "tagged_title" },
+                    { name: "custom_markup", label: "Wysiwyg Override", type: "Reference", target: "promo_view_wysiwyg" },
+                    { name: "promotion_flag", label: "Promo Flag Overlay", type: "Reference", target: "promo_flag_view" },
+                    { name: "action_cta", label: "Call To Action Link", type: "Global Field", target: "cta" }
+                ]
+            },
+            {
+                id: "category_cards_view",
+                name: "Category Cards Array",
+                path: "content_types/category_cards_view.json",
+                type: "component",
+                description: "Visual entrypoint listing of specific catalog categories with graphic cards, taggings, and quick links.",
+                fields: [
+                    { name: "cards_nesting", label: "Nesting wrapper mapping", type: "Reference", target: "category_cards_view" }
+                ]
+            },
+            {
+                id: "category_cards_nested_view",
+                name: "Nested Categories Container",
+                path: "content_types/category_cards_nested_view.json",
+                type: "structural",
+                description: "Handles grouping indices of unique category nodes, displaying label alignments, and listing subcard templates.",
+                fields: [
+                    { name: "nested_items", label: "Category Card Entities", type: "Reference", target: "category_cards_nested_item_view" },
+                    { name: "label_formatting", label: "Label Styles Config", type: "Reference", target: "category_label" }
+                ]
+            },
+            {
+                id: "category_cards_nested_item_view",
+                name: "Individual Category Card",
+                path: "content_types/category_cards_nested_item_view.json",
+                type: "component",
+                description: "Card details content structure managing image properties, title label structures, tracking parameters and relative URLs.",
+                fields: [
+                    { name: "title", label: "Card Headline", type: "Text" },
+                    { name: "banner_art", label: "Cover Photo", type: "Global Field", target: "responsive_image" },
+                    { name: "target_link", label: "Navigation URL", type: "Text" }
+                ]
+            },
+            {
+                id: "lookbook_view",
+                name: "Lookbook Grid Component",
+                path: "content_types/lookbook_view.json",
+                type: "component",
+                description: "Interactive editorial style interface showcasing model imagery embedded with tagged hover coordinates connecting back to product details.",
+                fields: [
+                    { name: "headline", label: "Lookbook Headline", type: "Text" },
+                    { name: "look_components", label: "Shoppable items mapping", type: "Reference", target: "shop_the_look_view" }
+                ]
+            },
+            {
+                id: "shop_the_look_view",
+                name: "Shoppable Product Tag Mapping",
+                path: "content_types/shop_the_look_view.json",
+                type: "component",
+                description: "Pairs background images with localized SVG nodes tracking custom coordinate hotspots linking back to the commerce system.",
+                fields: [
+                    { name: "mapped_product", label: "Product Selector Hook", type: "Global Field", target: "product_picker" },
+                    { name: "spot_x", label: "Coordinate Horizontal (%)", type: "Text" },
+                    { name: "spot_y", label: "Coordinate Vertical (%)", type: "Text" }
+                ]
+            },
+
+            // SEO / SYSTEM SCHEMAS
+            {
+                id: "seo_page_data",
+                name: "SEO Page Metadata Template",
+                path: "content_types/seo_page_data.json",
+                type: "seo",
+                description: "Global page-specific search metadata, social media sharing templates, robot crawlers and site index configurations.",
+                fields: [
+                    { name: "meta_title", label: "Meta Title Override", type: "Text" },
+                    { name: "meta_description", label: "Meta Description", type: "Text" },
+                    { name: "seo_graph_data", label: "Open Graph Tags", type: "Global Field", target: "analytics" },
+                    { name: "meta_rules", label: "SEO Robot Crawling rules", type: "Global Field", target: "breakpoint_booleans" }
+                ]
+            },
+            {
+                id: "seo_pdp_global_template",
+                name: "Global PDP SEO Controller",
+                path: "content_types/seo_pdp_global_template.json",
+                type: "seo",
+                description: "Automated dynamic string patterns formatting catalog schema values (e.g., [Product Name] - Buy [Brand] online) at scale.",
+                fields: [
+                    { name: "fallback_title", label: "SEO Title String Template", type: "Text" },
+                    { name: "structured_markup", label: "JSON-LD Structured Schema", type: "Text" }
+                ]
+            },
+
+            // GLOBAL FIELDS
+            {
+                id: "wrapper_settings",
+                name: "Section Wrapper Layout",
+                path: "global_fields/wrapper_settings.json",
+                type: "global_field",
+                description: "Establishes unified layout margins, outer padding constraints, background gradients and custom CSS identifier classes.",
+                fields: [
+                    { name: "padding_top", label: "Top Spacer Space", type: "Select" },
+                    { name: "padding_bottom", label: "Bottom Spacer Space", type: "Select" },
+                    { name: "container_width", label: "Max Content Width limit", type: "Select" }
+                ]
+            },
+            {
+                id: "responsive_image",
+                name: "Responsive Media Loader",
+                path: "global_fields/responsive_image.json",
+                type: "global_field",
+                description: "Saves adaptive assets mapping specific mobile images and desktop image ratios to speed up page optimizations.",
+                fields: [
+                    { name: "desktop_asset", label: "Desktop Media File", type: "Asset" },
+                    { name: "mobile_asset", label: "Mobile Media File", type: "Asset" },
+                    { name: "alt_text", label: "Accessibility Title (Alt)", type: "Text" }
+                ]
+            },
+            {
+                id: "cta",
+                name: "Call-To-Action Link",
+                path: "global_fields/cta.json",
+                type: "global_field",
+                description: "Defines primary interaction buttons with icons, custom label descriptions, link protocols and tracking keys.",
+                fields: [
+                    { name: "label", label: "Button Label Text", type: "Text" },
+                    { name: "href", label: "External / Internal Route Link", type: "Text" },
+                    { name: "link_style", label: "Button Visual Type (Solid/Outline)", type: "Select" }
+                ]
+            },
+            {
+                id: "text_alignment",
+                name: "Text Layout Aligner",
+                path: "global_fields/text_alignment.json",
+                type: "global_field",
+                description: "Stores viewport content alignments such as left, center or right-oriented formats dynamically across devices.",
+                fields: [
+                    { name: "alignment_type", label: "Text Alignment Direction", type: "Select" }
+                ]
+            },
+            {
+                id: "tagged_title",
+                name: "Tagged Graphic Header",
+                path: "global_fields/tagged_title.json",
+                type: "global_field",
+                description: "Manages combined typography elements holding primary bold titles paired with small decorative accent subtitles.",
+                fields: [
+                    { name: "eyebrow_text", label: "Small Eyebrow Label", type: "Text" },
+                    { name: "main_heading", label: "Primary Bold Heading", type: "Text" }
+                ]
+            },
+            {
+                id: "product_picker",
+                name: "Product Commerce Hook",
+                path: "global_fields/product_picker.json",
+                type: "global_field",
+                description: "Standardised identifier selection storing commerce system references, product SKU IDs and dynamic catalog pointers.",
+                fields: [
+                    { name: "sku_id", label: "Linked Product SKU", type: "Text" },
+                    { name: "variant_id", label: "Target Variant Selector", type: "Text" }
+                ]
+            },
+            {
+                id: "analytics",
+                name: "Metadata Tracking Settings",
+                path: "global_fields/analytics.json",
+                type: "global_field",
+                description: "Common structure containing custom analytics events tracking triggers, Google Tag Manager labels and page tracking codes.",
+                fields: [
+                    { name: "event_category", label: "Analytics category value", type: "Text" },
+                    { name: "tracking_label", label: "Custom Tracking ID", type: "Text" }
+                ]
+            },
+            {
+                id: "theme",
+                name: "Brand Graphic Theme Settings",
+                path: "global_fields/theme.json",
+                type: "global_field",
+                description: "Global selection schemas formatting background palettes, custom highlight gradients and corporate color details.",
+                fields: [
+                    { name: "base_color", label: "Base Visual Accent", type: "Select" },
+                    { name: "invert_palette", label: "Dark Mode Inverted Theme", type: "Boolean" }
+                ]
+            },
+            {
+                id: "breakpoint_booleans",
+                name: "Responsive Display Rules",
+                path: "global_fields/breakpoint_booleans.json",
+                type: "global_field",
+                description: "Boolean settings allowing users to explicitly toggle component visibilities based on mobile, tablet or desktop breakpoints.",
+                fields: [
+                    { name: "hide_mobile", label: "Hide on Mobile screens", type: "Boolean" },
+                    { name: "hide_tablet", label: "Hide on Tablet screens", type: "Boolean" }
+                ]
+            }
+        ];
+
+        // Define relationship connections mapping out the graph links
+        const modelConnections = [
+            // Catalogue page linkages
+            { source: "catalogue_page", target: "seo_page_data", type: "reference" },
+            { source: "catalogue_page", target: "catalogue_page_content", type: "reference" },
+            
+            // Catalogue Page content linkages
+            { source: "catalogue_page_content", target: "hero_view", type: "reference" },
+            { source: "catalogue_page_content", target: "promo_view", type: "reference" },
+            { source: "catalogue_page_content", target: "category_cards_view", type: "reference" },
+            { source: "catalogue_page_content", target: "product_grid_view", type: "reference" },
+            { source: "catalogue_page_content", target: "lookbook_view", type: "reference" },
+
+            // PDP linkages
+            { source: "pdp_page", target: "seo_pdp_global_template", type: "reference" },
+            { source: "pdp_page", target: "pdp_content", type: "reference" },
+            { source: "pdp_page", target: "pdp_global_items", type: "reference" },
+
+            // PDP content mapping
+            { source: "pdp_content", target: "pdp_shipping_banner_view", type: "reference" },
+            { source: "pdp_content", target: "pdp_payment_message", type: "reference" },
+            { source: "pdp_content", target: "pdp_content_spot_atb_view", type: "reference" },
+
+            // Category card trees
+            { source: "category_cards_view", target: "category_cards_nested_view", type: "reference" },
+            { source: "category_cards_nested_view", target: "category_cards_nested_item_view", type: "reference" },
+            { source: "category_cards_nested_view", target: "category_label", type: "reference" },
+
+            // Lookbook trees
+            { source: "lookbook_view", target: "shop_the_look_view", type: "reference" },
+            { source: "shop_the_look_view", target: "product_picker", type: "global_field" },
+
+            // Global configurations
+            { source: "site_global_items", target: "header_view", type: "reference" },
+            { source: "site_global_items", target: "footer_view", type: "reference" },
+            { source: "site_global_items", target: "theme", type: "global_field" },
+            { source: "site_global_items", target: "app_global", type: "reference" },
+
+            // Navigation details
+            { source: "header_view", target: "header_config", type: "reference" },
+            { source: "header_view", target: "menu_links_view", type: "reference" },
+            { source: "header_view", target: "drop_navigation_view", type: "reference" },
+            { source: "header_view", target: "sub_theme", type: "global_field" },
+
+            // Footers
+            { source: "footer_view", target: "newsletter_footer_signup_view", type: "reference" },
+            { source: "footer_view", target: "hyperlink", type: "reference" },
+            { source: "footer_view", target: "view_types", type: "global_field" },
+
+            // Generic utility elements connected to Global Fields
+            { source: "hero_view", target: "cta", type: "global_field" },
+            { source: "hero_view", target: "responsive_image", type: "global_field" },
+            { source: "hero_view", target: "text_alignment", type: "global_field" },
+            { source: "hero_view", target: "wrapper_settings", type: "global_field" },
+            { source: "hero_view", target: "tagged_title", type: "global_field" },
+            { source: "hero_view", target: "breakpoint_booleans", type: "global_field" },
+
+            { source: "promo_view", target: "cta", type: "global_field" },
+            { source: "promo_view", target: "tagged_title", type: "global_field" },
+            { source: "promo_view", target: "wrapper_settings", type: "global_field" },
+
+            { source: "category_cards_nested_item_view", target: "responsive_image", type: "global_field" },
+
+            { source: "seo_page_data", target: "analytics", type: "global_field" },
+            { source: "seo_page_data", target: "breakpoint_booleans", type: "global_field" },
+
+            { source: "gift_card_page", target: "seo_page_data", type: "reference" },
+            { source: "gift_card_page", target: "hero_view", type: "reference" },
+
+            { source: "content_page", target: "seo_page_data", type: "reference" },
+            { source: "content_page", target: "hero_view", type: "reference" }
+        ];
+
+        // Secondary raw content list mapped as utilities or supplementary components
+        const unmappedRawNames = [
+            "promo_view_wysiwyg", "dynamic_module_nested_view", "_test_catalogue_page_content", 
+            "dynamic_module_nested_item_view", "dynamic_module_view", "modals_view", "tessttt", 
+            "_test_asp_catalogue_page_content", "drop_view", "visual_navigation_view", "nesting_hero_view", 
+            "membership_milestones_view", "smart_cards_nested_view", "custom_settings", "membership_benefits_view", 
+            "legal_page_view", "product_grid_view", "usp_banner_slide_view", "seo_block_style_view", 
+            "shipping_and_returns", "generic_error_view", "header_view", "newsletter_flyout_signup_view", 
+            "plp_elevated_settings_view", "flex_module_view", "gift_finder_view", "system__migrations_tracking_ct", 
+            "splash_view", "remix_widget_view", "usp_shopping_bag_view", "seo_copy_block_view", "entry_bulk_update_test", 
+            "seo_block_style", "test_metadata_limit", "pdp_shipping_and_returns_view", "promo_flag_view", 
+            "_test_version", "pdp_payment_message", "pdp_shipping_banner_view", "video_view", "pdp_content_spot_view", 
+            "drop_navigation_view", "membership_popup_view", "sticky_nav_group_view", "espot_carousel_view", 
+            "sale_banner_view", "accordion_content_view", "app_customize", "seo_page_data_template_config", 
+            "size_guide_tables_view", "top_searches_view", "dynamic_grid_view", "two_images_view", "register_view", 
+            "catalogue_category_custom", "header_config", "category_entries_view", "promo_join_view", 
+            "site_global_items_custom_theme_css", "usp_banner_view", "popup_newsletter_image_view", 
+            "live_chat_view", "feature_list_view", "icons_row_view", "ugc_module_view", "flex_module_element", 
+            "membership_image_view", "split_view", "live_selling_view", "retail_module_view", "hyperlink", 
+            "test_ref_container", "smart_cards_nested_item_view", "xo_placements", "editorial_carousel_view", 
+            "drop_anchor_view", "newsletter_footer_signup_view", "test_banner", "category_label", 
+            "slide_panel_view", "plp_top_banner_view", "seo_metadata", "pdp_countdown_view", "background_view", 
+            "messaging_view", "size_guide_view", "pdp_global_items", "e-spot_view", "module_1_view", 
+            "menu_links_view", "seo_indexable_filter_data", "espot_view", "test_with_sidebar_widget", "iframe_view", 
+            "youtube_video_view", "membership_points_view", "fit_guide_extended_view", "app_global", "seo_pdp_override", 
+            "event_details_view", "smart_cards_view", "myaccount_split_view", "newsletter_signup", "recommendations_view", 
+            "pdp_content_spot_atb_view", "klarna_payment_messaging_view"
+        ];
+
+        // Hydrate base model dataset with raw keys to make sure everything from files is visualized.
+        const allModelIds = new Set(contentModels.map(m => m.id));
+        unmappedRawNames.forEach(rawId => {
+            if (!allModelIds.has(rawId)) {
+                let generatedType = "component";
+                let desc = "Content definition component parsing raw values for pages.";
+                if (rawId.includes("page")) { generatedType = "page"; desc = "Visual layout workspace organizing dynamic layout features."; }
+                else if (rawId.includes("seo") || rawId.includes("metadata")) { generatedType = "seo"; desc = "Global SEO metadata properties defining custom crawling tags."; }
+                else if (rawId.includes("test") || rawId.includes("migration") || rawId === "tessttt") { generatedType = "utility"; desc = "Internal structural file tracking development releases and tests."; }
+                else if (rawId.includes("global") || rawId.includes("config") || rawId.includes("settings")) { generatedType = "structural"; desc = "Core structural settings controlling rendering systems."; }
+
+                contentModels.push({
+                    id: rawId,
+                    name: rawId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                    path: `content_types/${rawId}.json`,
+                    type: generatedType,
+                    description: desc,
+                    fields: [
+                        { name: "title", label: "Title", type: "Text" },
+                        { name: "custom_parameters", label: "System Fields Group", type: "Group" }
+                    ]
+                });
+                allModelIds.add(rawId);
+            }
+        });
+
+        // Add the extra global fields that weren't in base list
+        const extraGlobalFields = ["horizontal_alignment", "sub_theme", "vertical_alignment", "comma_seprated_numbers", "page", "view_types"];
+        extraGlobalFields.forEach(gf => {
+            const gfId = gf;
+            if (!allModelIds.has(gfId)) {
+                contentModels.push({
+                    id: gfId,
+                    name: gfId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                    path: `global_fields/${gfId}.json`,
+                    type: "global_field",
+                    description: "Global shared field schema defining dynamic responsive positioning layout rules.",
+                    fields: [
+                        { name: "value", label: "Property Rule", type: "Select" }
+                    ]
+                });
+                allModelIds.add(gfId);
+            }
+        });
+
+        // Multi-select active filters (All active by default)
+        const activeTypes = new Set(["page", "structural", "component", "seo", "global_field", "utility"]);
+        let searchQuery = "";
+        let selectedNode = null;
+
+        // D3 setup properties
+        let svg, g, simulation, linkElements, nodeElements, textElements;
+        let d3Nodes = []; // Store coordinates globally for centering transitions
+        let zoomGroup;    // Reference globally for viewport alignment
+        let zoom;         // Reference globally
+
+        // Sidebar Collapse State flags
+        let leftSidebarOpen = true;
+        let rightSidebarOpen = true;
+
+        // Color mappings refined for light backgrounds to ensure optimal contrast (strictly single declaration)
+        const categoryColors = {
+            page: { fill: "#10b981", stroke: "#047857", light: "#047857", bg: "#ecfdf5", label: "Page", border: "border-emerald-200", ring: "ring-emerald-500" },
+            structural: { fill: "#3b82f6", stroke: "#1d4ed8", light: "#1d4ed8", bg: "#eff6ff", label: "Structure", border: "border-blue-200", ring: "ring-blue-500" },
+            component: { fill: "#6366f1", stroke: "#4338ca", light: "#4338ca", bg: "#e0e7ff", label: "View", border: "border-indigo-200", ring: "ring-indigo-500" },
+            seo: { fill: "#a855f7", stroke: "#7e22ce", light: "#7e22ce", bg: "#faf5ff", label: "SEO / Meta", border: "border-purple-200", ring: "ring-purple-500" },
+            global_field: { fill: "#f43f5e", stroke: "#be123c", light: "#be123c", bg: "#fff1f2", label: "Global Field", border: "border-rose-200", ring: "ring-rose-500" },
+            utility: { fill: "#64748b", stroke: "#334155", light: "#334155", bg: "#f8fafc", label: "Internal", border: "border-slate-200", ring: "ring-slate-500" }
+        };
+
+        // DOM Elements
+        const directoryList = document.getElementById("directory-list");
+        const dirCount = document.getElementById("directory-count");
+        const detailsPlaceholder = document.getElementById("details-placeholder");
+        const detailsActive = document.getElementById("details-active");
+        const searchInput = document.getElementById("search-input");
+        const categoryPillsContainer = document.getElementById("category-filter-pills");
+        const traceSource = document.getElementById("trace-source");
+        const traceTarget = document.getElementById("trace-target");
+        const traceBtn = document.getElementById("trace-btn");
+        const traceResetBtn = document.getElementById("trace-reset");
+        const topControlsBar = document.getElementById("top-controls-bar");
+
+        // Gemini API Configuration
+        const apiKey = ""; // Runtime provided
+
+        // Gemini API caller implementing retry backoff (5 attempts: 1s, 2s, 4s, 8s, 16s)
+        async function callGemini(prompt, systemInstruction = "") {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }]
+            };
+            if (systemInstruction) {
+                payload.systemInstruction = { parts: [{ text: systemInstruction }] };
+            }
+
+            let delay = 1000;
+            for (let i = 0; i < 5; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (response.ok) {
+                        const result = await response.json();
+                        return result.candidates?.[0]?.content?.parts?.[0]?.text || "No response received.";
+                    }
+                } catch (e) {
+                    // Retry silently
+                }
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2;
+            }
+            throw new Error("Gemini API call failed after 5 retries. Please check network connection.");
+        }
+
+        // Trigger AI analysis on current selected model
+        async function triggerGeminiAction(actionType) {
+            if (!selectedNode) return;
+            const outputBlock = document.getElementById("gemini-output");
+            const outputText = document.getElementById("gemini-output-text");
+
+            if (outputBlock) outputBlock.classList.remove("hidden");
+            if (outputText) outputText.innerHTML = `<span class="animate-pulse text-slate-400">Processing request via Gemini...</span>`;
+
+            const modelContextStr = JSON.stringify(selectedNode, null, 2);
+            let prompt = "";
+            let systemPrompt = "You are an expert Contentstack Architect. Provide extremely concise, professional, architectural responses based solely on Contentstack content-modeling structures.";
+
+            if (actionType === 'analyze') {
+                prompt = `Analyze this Contentstack Content Model schema. Point out any potential bottlenecks, architectural redundancies, or suggestions for frontend reusability:\n\n${modelContextStr}`;
+            } else if (actionType === 'mock') {
+                prompt = `Generate a realistic, high-fidelity sample JSON API response object based exactly on this Content Model. Output ONLY valid, clean JSON without any markdown decoration:\n\n${modelContextStr}`;
+            } else if (actionType === 'suggest') {
+                prompt = `Review the currently defined fields and descriptions of this content model. Suggest 3 highly relevant and useful content fields (with types) that could be added to enrich its schema:\n\n${modelContextStr}`;
+            }
+
+            try {
+                const response = await callGemini(prompt, systemPrompt);
+                if (outputText) outputText.textContent = response;
+            } catch (err) {
+                if (outputText) outputText.innerHTML = `<span class="text-rose-500 font-semibold">⚠️ ${err.message}</span>`;
+            }
+        }
+
+        // Custom Chat Copilot trigger
+        async function submitGeminiChat() {
+            const inputEl = document.getElementById("gemini-input");
+            if (!inputEl) return;
+            const chatQuery = inputEl.value.trim();
+            if (!chatQuery || !selectedNode) return;
+
+            inputEl.value = "";
+            const outputBlock = document.getElementById("gemini-output");
+            const outputText = document.getElementById("gemini-output-text");
+
+            if (outputBlock) outputBlock.classList.remove("hidden");
+            if (outputText) outputText.innerHTML = `<span class="animate-pulse text-slate-400">Consulting Gemini Copilot...</span>`;
+
+            const modelContextStr = JSON.stringify(selectedNode, null, 2);
+            const prompt = `Selected Content Model Metadata:\n${modelContextStr}\n\nUser Question: ${chatQuery}`;
+            const systemPrompt = "You are an expert Contentstack Developer Assistant. Help the developer write frontend code, customize model relationships, or design optimal schema payloads.";
+
+            try {
+                const response = await callGemini(prompt, systemPrompt);
+                if (outputText) outputText.textContent = response;
+            } catch (err) {
+                if (outputText) outputText.innerHTML = `<span class="text-rose-500 font-semibold">⚠️ ${err.message}</span>`;
+            }
+        }
+
+        // Dynamic Semantic Relationship Engine
+        function runSemanticMatchingEngine() {
+            const connectionsSet = new Set();
+            
+            modelConnections.forEach(c => {
+                const srcId = c.source;
+                const tgtId = c.target;
+                connectionsSet.add(`${srcId}➔${tgtId}`);
+            });
+
+            function addRelationship(sourceId, targetId, connectionType, fieldName, fieldLabel, fieldType) {
+                if (sourceId === targetId) return;
+                const key = `${sourceId}➔${targetId}`;
+                if (connectionsSet.has(key)) return;
+                
+                connectionsSet.add(key);
+                
+                modelConnections.push({
+                    source: sourceId,
+                    target: targetId,
+                    type: connectionType
+                });
+
+                const sourceModel = contentModels.find(m => m.id === sourceId);
+                if (sourceModel) {
+                    sourceModel.fields = sourceModel.fields.filter(f => f.name !== "custom_parameters");
+                    if (!sourceModel.fields.some(f => f.name === fieldName)) {
+                        sourceModel.fields.push({
+                            name: fieldName,
+                            label: fieldLabel || fieldName.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                            type: fieldType || (connectionType === "global_field" ? "Global Field" : "Reference"),
+                            target: targetId
+                        });
+                    }
+                }
+            }
+
+            const seos = contentModels.filter(m => m.type === "seo");
+            const structural = contentModels.filter(m => m.type === "structural");
+            const components = contentModels.filter(m => m.type === "component");
+            const globalFields = contentModels.filter(m => m.type === "global_field");
+
+            contentModels.forEach(m => {
+                const mId = m.id;
+
+                if (m.type === "page") {
+                    seos.forEach(seo => {
+                        if (seo.id === "seo_page_data" || seo.id.includes(mId.replace("_page", ""))) {
+                            addRelationship(mId, seo.id, "reference", `${mId}_seo`, "SEO Meta Setup", "Reference");
+                        }
+                    });
+
+                    structural.forEach(struct => {
+                        const cleanName = mId.replace("_page", "");
+                        if (struct.id.includes(cleanName) || struct.id.startsWith(cleanName)) {
+                            addRelationship(mId, struct.id, "reference", `${cleanName}_modular_grid`, "Page Blocks", "Modular Block");
+                        }
+                    });
+
+                    components.forEach(comp => {
+                        if (comp.id.includes(mId.replace("_page", "")) && mId !== "content_page") {
+                            addRelationship(mId, comp.id, "reference", `page_${comp.id}`, comp.name, "Reference");
+                        }
+                    });
+                }
+
+                if (m.type === "structural") {
+                    if (mId.includes("content") || mId.includes("blocks") || mId.includes("settings") || mId.includes("modular")) {
+                        components.forEach(comp => {
+                            const allowedStandardViews = [
+                                "hero_view", "promo_view", "category_cards_view", "product_grid_view", 
+                                "lookbook_view", "usp_banner_view", "sale_banner_view", "editorial_carousel_view",
+                                "video_view", "slide_panel_view", "split_view", "accordion_content_view"
+                            ];
+                            const compPrefix = comp.id.split('_')[0];
+                            const structPrefix = mId.split('_')[0];
+                            if (allowedStandardViews.includes(comp.id) || (compPrefix && structPrefix && compPrefix === structPrefix)) {
+                                addRelationship(mId, comp.id, "reference", `block_${comp.id}`, comp.name, "Reference");
+                            }
+                        });
+                    }
+
+                    if (mId === "pdp_content" || mId.includes("pdp_")) {
+                        components.forEach(comp => {
+                            if (comp.id.includes("pdp_") || comp.id === "klarna_payment_messaging_view" || comp.id === "recommendations_view") {
+                                addRelationship(mId, comp.id, "reference", `pdp_widget_${comp.id}`, comp.name, "Reference");
+                            }
+                        });
+                    }
+
+                    const basePrefix = mId.split('_')[0];
+                    if (basePrefix && basePrefix.length > 3 && basePrefix !== "view" && basePrefix !== "test" && basePrefix !== "site") {
+                        components.forEach(comp => {
+                            if (comp.id.startsWith(basePrefix) && comp.id !== mId) {
+                                addRelationship(mId, comp.id, "reference", `ref_${comp.id}`, comp.name, "Reference");
+                            }
+                        });
+                    }
+                }
+
+                if (m.type === "component") {
+                    if (mId === "lookbook_view") {
+                        addRelationship(mId, "shop_the_look_view", "reference", "looks_data", "Shoppable Spot Mapper", "Reference");
+                    }
+                    if (mId === "smart_cards_view") {
+                        addRelationship(mId, "smart_cards_nested_view", "reference", "cards_grid", "Cards List Nesting", "Reference");
+                    }
+                    if (mId === "smart_cards_nested_view") {
+                        addRelationship(mId, "smart_cards_nested_item_view", "reference", "nested_cards", "Individual Display Cards", "Reference");
+                    }
+                    if (mId === "dynamic_module_view") {
+                        addRelationship(mId, "dynamic_module_nested_view", "reference", "modules_nested", "Module Grid Nesting", "Reference");
+                    }
+                    if (mId === "dynamic_module_nested_view") {
+                        addRelationship(mId, "dynamic_module_nested_item_view", "reference", "module_items", "Dynamic Items", "Reference");
+                    }
+
+                    const prefix = mId.split('_')[0];
+                    if (prefix && prefix.length > 3 && prefix !== "view" && prefix !== "test" && prefix !== "pdp" && prefix !== "seo" && prefix !== "site") {
+                        components.forEach(comp => {
+                            if (comp.id.startsWith(prefix) && comp.id !== mId && !comp.id.includes("nested")) {
+                                addRelationship(mId, comp.id, "reference", `linked_${comp.id}`, comp.name, "Reference");
+                            }
+                        });
+                    }
+
+                    globalFields.forEach(gf => {
+                        const gfId = gf.id;
+                        const standardInteractiveViews = ["hero_view", "promo_view", "video_view", "slide_panel_view", "split_view", "accordion_content_view", "usp_banner_view"];
+                        if (standardInteractiveViews.includes(mId)) {
+                            if (gfId === "wrapper_settings" || gfId === "responsive_image" || gfId === "cta" || gfId === "breakpoint_booleans") {
+                                addRelationship(mId, gfId, "global_field", `settings_${gfId}`, gf.name, "Global Field");
+                            }
+                        }
+
+                        if (mId.includes("banner") || mId.includes("card") || mId.includes("spot") || mId.includes("header") || mId.includes("footer")) {
+                            if (gfId === "tagged_title" || gfId === "text_alignment" || gfId === "sub_theme" || gfId === "view_types" || gfId === "horizontal_alignment" || gfId === "vertical_alignment") {
+                                addRelationship(mId, gfId, "global_field", `style_${gfId}`, gf.name, "Global Field");
+                            }
+                        }
+
+                        if (mId.includes("product") || mId.includes("shop_the_look") || mId.includes("catalog") || mId.includes("recommendations")) {
+                            if (gfId === "product_picker" || gfId === "analytics") {
+                                addRelationship(mId, gfId, "global_field", `commerce_${gfId}`, gf.name, "Global Field");
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        // Update dashboard counter displays
+        function updateStatsCounters() {
+            if (dirCount) dirCount.textContent = contentModels.length;
+            const sTotal = document.getElementById("stat-total-models");
+            const sComp = document.getElementById("stat-content-types");
+            const sRel = document.getElementById("stat-relations");
+            if (sTotal) sTotal.textContent = contentModels.length;
+            if (sComp) sComp.textContent = contentModels.filter(m => m.type !== 'global_field').length;
+            if (sRel) sRel.textContent = modelConnections.length;
+        }
+
+        // Fill Trace Selection dropdowns
+        function populateTraceSelects() {
+            const sortedModels = [...contentModels].sort((a,b) => a.name.localeCompare(b.name));
+            
+            let sourceHtml = `<option value="">-- Source --</option>`;
+            let targetHtml = `<option value="">-- Target --</option>`;
+
+            sortedModels.forEach(m => {
+                sourceHtml += `<option value="${m.id}">${m.name}</option>`;
+                targetHtml += `<option value="${m.id}">${m.name}</option>`;
+            });
+
+            if (traceSource) traceSource.innerHTML = sourceHtml;
+            if (traceTarget) traceTarget.innerHTML = targetHtml;
+        }
+
+        // Render and Sync category pill counters
+        function renderCategoryPills() {
+            const typesList = ["page", "structural", "component", "seo", "global_field", "utility"];
+            
+            typesList.forEach(t => {
+                const count = contentModels.filter(m => m.type === t).length;
+                const badge = document.getElementById(`count-${t}`);
+                if (badge) badge.textContent = count;
+
+                const pill = document.querySelector(`[data-type="${t}"]`);
+                if (pill) {
+                    const colorData = categoryColors[t];
+                    if (activeTypes.has(t)) {
+                        pill.className = `filter-pill flex items-center justify-between px-3 py-1 text-[11px] rounded-lg border-[0.75px] cursor-pointer transition-all font-semibold shadow-sm ${colorData.border} ${colorData.bg} text-slate-800`;
+                        pill.style.borderColor = colorData.stroke;
+                        pill.style.backgroundColor = colorData.bg;
+                        pill.style.color = "#0f172a";
+                    } else {
+                        pill.className = `filter-pill flex items-center justify-between px-3 py-1 text-[11px] rounded-lg border-[0.75px] cursor-pointer transition-all font-semibold bg-white border-slate-200 text-slate-400 hover:border-slate-300`;
+                        pill.style.borderColor = "#e2e8f0";
+                        pill.style.backgroundColor = "#ffffff";
+                        pill.style.color = "#94a3b8";
+                    }
+                }
+            });
+        }
+
+        // Toggles Left Sidebar (Directory panel collapsible upward)
+        function toggleLeftSidebar(forceState) {
+            const sidebar = document.getElementById("sidebar-panel");
+            const content = document.getElementById("sidebar-content");
+            const chevron = document.getElementById("left-chevron-icon");
+
+            if (forceState !== undefined) {
+                leftSidebarOpen = forceState;
+            } else {
+                leftSidebarOpen = !leftSidebarOpen;
+            }
+
+            if (leftSidebarOpen) {
+                if (sidebar) {
+                    sidebar.style.height = "calc(100% - 1.5rem)";
+                    sidebar.style.bottom = "0.75rem";
+                }
+                if (content) content.classList.remove("hidden");
+                // Expanded -> invite to collapse by pointing UP
+                if (chevron) chevron.classList.add("rotate-180");
+            } else {
+                if (sidebar) {
+                    sidebar.style.height = "48px"; // Height of title header
+                    sidebar.style.bottom = "auto";
+                }
+                if (content) content.classList.add("hidden");
+                // Collapsed -> invite to expand by pointing DOWN
+                if (chevron) chevron.classList.remove("rotate-180");
+            }
+
+            setTimeout(updateSimulationCenter, 310);
+        }
+
+        // Toggles Right Sidebar (Details panel collapsible upward)
+        function toggleRightSidebar(forceState) {
+            const panel = document.getElementById("details-panel");
+            const content = document.getElementById("details-content");
+            const chevron = document.getElementById("right-chevron-icon");
+
+            if (forceState !== undefined) {
+                rightSidebarOpen = forceState;
+            } else {
+                rightSidebarOpen = !rightSidebarOpen;
+            }
+
+            if (rightSidebarOpen) {
+                if (panel) {
+                    panel.style.height = "calc(100% - 1.5rem)";
+                    panel.style.bottom = "0.75rem";
+                }
+                if (content) content.classList.remove("hidden");
+                // Expanded -> invite to collapse by pointing UP
+                if (chevron) chevron.classList.add("rotate-180");
+            } else {
+                if (panel) {
+                    panel.style.height = "48px"; // Height of details header
+                    panel.style.bottom = "auto";
+                }
+                if (content) content.classList.add("hidden");
+                // Collapsed -> invite to expand by pointing DOWN
+                if (chevron) chevron.classList.remove("rotate-180");
+            }
+
+            setTimeout(updateSimulationCenter, 310);
+        }
+
+        // Recenter simulation viewport center dynamically on screen collapses
+        function updateSimulationCenter() {
+            if (!simulation) return;
+            const container = document.getElementById("canvas-container");
+            if (!container) return;
+            const rect = container.getBoundingClientRect();
+            
+            const leftOffset = leftSidebarOpen ? 320 : 0;
+            const rightOffset = rightSidebarOpen ? 384 : 0;
+            
+            const visibleCenterX = leftOffset + (rect.width - leftOffset - rightOffset) / 2;
+            const visibleCenterY = rect.height / 2;
+
+            simulation.force("center", d3.forceCenter(visibleCenterX, visibleCenterY));
+            simulation.alpha(0.15).restart();
+        }
+
+        // Render directory side index cards
+        function renderDirectory() {
+            const filtered = contentModels.filter(m => {
+                const matchesCat = activeTypes.has(m.type);
+                const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                      m.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                      m.description.toLowerCase().includes(searchQuery.toLowerCase());
+                return matchesCat && matchesSearch;
+            }).sort((a, b) => a.name.localeCompare(b.name));
+
+            if (dirCount) dirCount.textContent = filtered.length;
+            if (directoryList) directoryList.innerHTML = "";
+
+            if (filtered.length === 0) {
+                if (directoryList) {
+                    directoryList.innerHTML = `
+                        <div class="p-4 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-slate-200">
+                            No content models match filters.
+                        </div>
+                    `;
+                }
+                return;
+            }
+
+            filtered.forEach(m => {
+                const catInfo = categoryColors[m.type] || categoryColors.utility;
+                const itemDiv = document.createElement("div");
+                const isSelected = selectedNode?.id === m.id;
+                
+                const connectionCount = modelConnections.filter(c => 
+                    (c.source.id || c.source) === m.id || (c.target.id || c.target) === m.id
+                ).length;
+
+                itemDiv.className = `p-2 rounded-lg border cursor-pointer transition flex flex-col gap-1 ${
+                    isSelected 
+                    ? 'ring-2 ring-indigo-500 border-indigo-500 bg-indigo-50/50' 
+                    : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+                }`;
+                itemDiv.onclick = () => {
+                    selectNodeById(m.id);
+                    if (window.innerWidth < 1024) {
+                        toggleLeftSidebar(false);
+                    }
+                };
+
+                itemDiv.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-800 truncate pr-2">${m.name}</span>
+                        <div class="flex items-center gap-1 shrink-0">
+                            <span class="flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.5 rounded text-slate-500 bg-slate-100 border border-slate-200" title="${connectionCount} Connections">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                                ${connectionCount}
+                            </span>
+                            <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase" style="background-color: ${catInfo.bg}; color: ${catInfo.light}; border: 1px solid ${catInfo.stroke}22">
+                                ${catInfo.label}
+                            </span>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-500 line-clamp-1 font-medium">${m.description}</p>
+                `;
+                if (directoryList) directoryList.appendChild(itemDiv);
+            });
+        }
+
+        // Create full D3 Zoomable Network Map
+        function initD3Graph() {
+            const container = document.getElementById("canvas-container");
+            if (!container) return;
+            const svgElement = d3.select("#network-svg");
+            
+            const rect = container.getBoundingClientRect();
+            const svgWidth = rect.width || window.innerWidth;
+            const svgHeight = rect.height || window.innerHeight;
+
+            svgElement.selectAll("*").remove();
+
+            zoomGroup = svgElement.append("g");
+            zoom = d3.zoom()
+                .scaleExtent([0.1, 4])
+                .on("zoom", (event) => {
+                    zoomGroup.attr("transform", event.transform);
+                });
+
+            svgElement.call(zoom);
+
+            const defs = svgElement.append("defs");
+            defs.append("pattern")
+                .attr("id", "grid-pattern")
+                .attr("width", 40)
+                .attr("height", 40)
+                .attr("patternUnits", "userSpaceOnUse")
+                .append("circle")
+                .attr("cx", 2)
+                .attr("cy", 2)
+                .attr("r", 1)
+                .attr("fill", "#cbd5e1");
+
+            zoomGroup.append("rect")
+                .attr("width", svgWidth * 10)
+                .attr("height", svgHeight * 10)
+                .attr("x", -svgWidth * 5)
+                .attr("y", -svgHeight * 5)
+                .attr("fill", "url(#grid-pattern)")
+                .attr("pointer-events", "all");
+
+            d3Nodes = contentModels.map(m => ({
+                id: m.id,
+                name: m.name,
+                type: m.type,
+                description: m.description,
+                fx: null,
+                fy: null
+            }));
+
+            const links = modelConnections.map(c => ({
+                source: c.source,
+                target: c.target,
+                type: c.type
+            }));
+
+            simulation = d3.forceSimulation(d3Nodes)
+                .force("link", d3.forceLink(links).id(d => d.id).distance(155).strength(1))
+                .force("charge", d3.forceManyBody().strength(-300))
+                .force("center", d3.forceCenter(svgWidth / 2, svgHeight / 2))
+                .force("collide", d3.forceCollide().radius(50).iterations(2));
+
+            linkElements = zoomGroup.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(links)
+                .enter().append("line")
+                .attr("stroke", d => d.type === 'global_field' ? '#f43f5e' : '#4f46e5')
+                .attr("stroke-opacity", 0.45)
+                .attr("stroke-width", d => d.type === 'global_field' ? 1.5 : 2);
+
+            const nodeGroup = zoomGroup.append("g").attr("class", "nodes");
+            
+            nodeElements = nodeGroup.selectAll("g")
+                .data(d3Nodes)
+                .enter().append("g")
+                .attr("class", "node-element cursor-pointer")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended))
+                .on("click", (event, d) => {
+                    selectNodeById(d.id);
+                })
+                .on("dblclick", (event, d) => {
+                    d.fx = null;
+                    d.fy = null;
+                    simulation.alpha(0.3).restart();
+                })
+                .on("mouseover", showTooltip)
+                .on("mouseout", hideTooltip);
+
+            nodeElements.append("circle")
+                .attr("r", d => d.type === 'global_field' ? 11 : 15)
+                .attr("fill", d => {
+                    const info = categoryColors[d.type] || categoryColors.utility;
+                    return info.fill;
+                })
+                .attr("stroke", d => {
+                    const info = categoryColors[d.type] || categoryColors.utility;
+                    return info.stroke;
+                })
+                .attr("stroke-width", 2.5);
+
+            nodeElements.append("circle")
+                .attr("r", d => d.type === 'global_field' ? 4 : 5)
+                .attr("fill", "#ffffff");
+
+            textElements = zoomGroup.append("g")
+                .attr("class", "labels")
+                .selectAll("text")
+                .data(d3Nodes)
+                .enter().append("text")
+                .attr("font-size", "10px")
+                .attr("font-weight", "600")
+                .attr("text-anchor", "middle")
+                .attr("pointer-events", "none")
+                .text(d => d.name);
+
+            // Tick simulation engine updates
+            simulation.on("tick", () => {
+                linkElements
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                nodeElements
+                    .attr("transform", d => `translate(${d.x}, ${d.y})`);
+
+                textElements
+                    .attr("x", d => d.x)
+                    .attr("y", d => d.y - 22);
+            });
+
+            svgElement.call(zoom.transform, d3.zoomIdentity.translate(svgWidth / 2 - 160, svgHeight / 2 - 40).scale(0.55));
+            filterNetworkByQuery();
+        }
+
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+
+        // Hover Tooltip rendering handlers
+        function showTooltip(event, d) {
+            const tooltip = document.getElementById("node-tooltip");
+            const catInfo = categoryColors[d.type] || categoryColors.utility;
+            
+            const titleEl = document.getElementById("tooltip-title");
+            const catEl = document.getElementById("tooltip-cat");
+            const descEl = document.getElementById("tooltip-desc");
+
+            if (titleEl) titleEl.textContent = d.name;
+            if (catEl) {
+                catEl.textContent = catInfo.label;
+                catEl.style.color = catInfo.light;
+            }
+            if (descEl) descEl.textContent = d.description;
+
+            if (tooltip) {
+                tooltip.style.opacity = "1";
+                tooltip.style.left = `${event.pageX + 15}px`;
+                tooltip.style.top = `${event.pageY + 15}px`;
+            }
+        }
+
+        // Hide Tooltip
+        function hideTooltip() {
+            const tooltip = document.getElementById("node-tooltip");
+            if (tooltip) tooltip.style.opacity = "0";
+        }
+
+        // Manage enable/disable trace route button state
+        function updateTraceButtonState() {
+            if (!traceSource || !traceTarget || !traceBtn) return;
+            const src = traceSource.value;
+            const tgt = traceTarget.value;
+            if (src && tgt) {
+                traceBtn.disabled = false;
+                traceBtn.classList.remove("opacity-50", "cursor-not-allowed", "bg-slate-300", "text-slate-500");
+                traceBtn.classList.add("bg-indigo-600", "hover:bg-indigo-700", "text-white", "cursor-pointer");
+            } else {
+                traceBtn.disabled = true;
+                traceBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-slate-300", "text-slate-500");
+                traceBtn.classList.remove("bg-indigo-600", "hover:bg-indigo-700", "text-white", "cursor-pointer");
+            }
+        }
+
+        // Highlight generator for formatting the JSON model raw source strings
+        function syntaxHighlightJson(json) {
+            if (typeof json !== 'string') {
+                json = JSON.stringify(json, undefined, 2);
+            }
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
+                let cls = 'text-amber-400'; // Default number / boolean values (Amber)
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'text-indigo-300 font-semibold'; // Key properties (Indigo)
+                    } else {
+                        cls = 'text-emerald-400'; // String values (Emerald)
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'text-sky-400 font-semibold';
+                } else if (/null/.test(match)) {
+                    cls = 'text-rose-400';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        // Node selection and detail inspector panel configuration
+        function selectNodeById(nodeId) {
+            const model = contentModels.find(m => m.id === nodeId);
+            if (!model) return;
+
+            selectedNode = model;
+
+            const outputBlock = document.getElementById("gemini-output");
+            const outputText = document.getElementById("gemini-output-text");
+            if (outputBlock) outputBlock.classList.add("hidden");
+            if (outputText) outputText.textContent = "";
+
+            renderDirectory();
+
+            const linkedNodeIds = new Set();
+            linkedNodeIds.add(nodeId);
+
+            modelConnections.forEach(c => {
+                if (c.source === nodeId || c.source.id === nodeId) {
+                    linkedNodeIds.add(c.target.id || c.target);
+                }
+                if (c.target === nodeId || c.target.id === nodeId) {
+                    linkedNodeIds.add(c.source.id || c.source);
+                }
+            });
+
+            nodeElements.style("opacity", d => {
+                if (!activeTypes.has(d.type)) return 0;
+                return linkedNodeIds.has(d.id) ? 1 : 0.15;
+            });
+            textElements.style("opacity", d => {
+                if (!activeTypes.has(d.type)) return 0;
+                return linkedNodeIds.has(d.id) ? 1 : 0.15;
+            });
+            linkElements.style("opacity", l => {
+                const srcId = l.source.id || l.source;
+                const tgtId = l.target.id || l.target;
+                
+                const srcType = contentModels.find(m => m.id === srcId)?.type;
+                const tgtType = contentModels.find(m => m.id === tgtId)?.type;
+                if (!activeTypes.has(srcType) || !activeTypes.has(tgtType)) return 0;
+
+                return (srcId === nodeId || tgtId === nodeId) ? 0.9 : 0.05;
+            });
+
+            const targetNode = d3Nodes.find(n => n.id === nodeId);
+            if (targetNode && targetNode.x !== undefined && targetNode.y !== undefined) {
+                const svgElement = d3.select("#network-svg");
+                const container = document.getElementById("canvas-container");
+                if (container) {
+                    const rect = container.getBoundingClientRect();
+                    const currentTransform = d3.zoomTransform(svgElement.node());
+                    const targetScale = Math.max(currentTransform.k, 0.7);
+                    
+                    svgElement.transition().duration(750).call(
+                        zoom.transform,
+                        d3.zoomIdentity
+                            .translate(rect.width / 2 - targetNode.x * targetScale, rect.height / 2 - targetNode.y * targetScale)
+                            .scale(targetScale)
+                    );
+                }
+            }
+
+            if (detailsPlaceholder) detailsPlaceholder.classList.add("hidden");
+            if (detailsActive) detailsActive.classList.remove("hidden");
+
+            const catInfo = categoryColors[model.type] || categoryColors.utility;
+            const detailCat = document.getElementById("detail-category");
+            if (detailCat) {
+                detailCat.textContent = catInfo.label;
+                detailCat.style.backgroundColor = catInfo.bg;
+                detailCat.style.color = catInfo.light;
+                detailCat.style.borderColor = `${catInfo.stroke}22`;
+            }
+
+            const detailConnCountEl = document.getElementById("detail-connections-count");
+            if (detailConnCountEl) {
+                const connectionCount = modelConnections.filter(c => 
+                    (c.source.id || c.source) === model.id || (c.target.id || c.target) === model.id
+                ).length;
+                detailConnCountEl.textContent = connectionCount;
+            }
+
+            const detailTitle = document.getElementById("detail-title");
+            const detailPath = document.getElementById("detail-path");
+            const detailDesc = document.getElementById("detail-desc");
+            if (detailTitle) detailTitle.textContent = model.name;
+            if (detailPath) detailPath.textContent = model.path;
+            if (detailDesc) detailDesc.textContent = model.description;
+
+            const fieldsContainer = document.getElementById("detail-fields-list");
+            if (fieldsContainer) {
+                fieldsContainer.innerHTML = "";
+                if (!model.fields || model.fields.length === 0) {
+                    fieldsContainer.innerHTML = `
+                        <div class="p-3 text-center text-xs text-slate-400 bg-slate-50 rounded border border-slate-200">
+                            No fields defined for this layout.
+                        </div>
+                    `;
+                } else {
+                    model.fields.forEach(f => {
+                        let typeBadgeColor = "bg-slate-100 text-slate-600 border border-slate-200";
+                        let targetBadge = "";
+
+                        if (f.type === "Reference") {
+                            typeBadgeColor = "bg-indigo-50 text-indigo-700 border border-indigo-200/50";
+                            targetBadge = `<span onclick="selectNodeById('${f.target}')" class="text-[9px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200 cursor-pointer transition font-semibold block truncate max-w-[130px]" title="${f.target}">➔ ${f.target}</span>`;
+                        } else if (f.type === "Global Field") {
+                            typeBadgeColor = "bg-rose-50 text-rose-700 border border-rose-200/50";
+                            targetBadge = `<span onclick="selectNodeById('${f.target}')" class="text-[9px] bg-rose-50 hover:bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded border border-rose-200 cursor-pointer transition font-semibold block truncate max-w-[130px]" title="${f.target}">➔ ${f.target}</span>`;
+                        } else if (f.type === "Group" || f.type === "Modular Block") {
+                            typeBadgeColor = "bg-amber-50 text-amber-700 border border-amber-200/50";
+                            if (f.target) {
+                                targetBadge = `<span onclick="selectNodeById('${f.target}')" class="text-[9px] bg-amber-50 hover:bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 cursor-pointer transition font-semibold block truncate max-w-[130px]" title="${f.target}">➔ ${f.target}</span>`;
+                            }
+                        }
+
+                        const fieldDiv = document.createElement("div");
+                        fieldDiv.className = "p-2.5 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-lg flex items-center justify-between text-xs transition gap-2";
+                        fieldDiv.innerHTML = `
+                            <div class="space-y-0.5 min-w-0 flex-1">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <span class="font-bold text-slate-800 code-font truncate text-xs">${f.name}</span>
+                                    ${f.required ? '<span class="text-rose-500 font-bold">*</span>' : ''}
+                                </div>
+                                <span class="text-[10px] text-slate-500 font-semibold block truncate">${f.label || f.name}</span>
+                            </div>
+                            <div class="flex flex-col items-end gap-1 shrink-0 text-right min-w-0 max-w-[140px]">
+                                <span class="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${typeBadgeColor}">${f.type}</span>
+                                ${targetBadge}
+                            </div>
+                        `;
+                        fieldsContainer.appendChild(fieldDiv);
+                    });
+                }
+            }
+
+            const connectionsContainer = document.getElementById("detail-connections");
+            if (connectionsContainer) {
+                connectionsContainer.innerHTML = "";
+
+                const inputConnections = modelConnections.filter(c => (c.target.id || c.target) === nodeId);
+                const outputConnections = modelConnections.filter(c => (c.source.id || c.source) === nodeId);
+
+                if (inputConnections.length === 0 && outputConnections.length === 0) {
+                    connectionsContainer.innerHTML = `
+                        <div class="p-2 text-center text-xs text-slate-400 bg-slate-50 rounded border border-slate-200">
+                            No direct references.
+                        </div>
+                    `;
+                } else {
+                    if (outputConnections.length > 0) {
+                        const title = document.createElement("div");
+                        title.className = "text-[9px] text-slate-400 font-bold uppercase mt-2 mb-1";
+                        title.textContent = "References Outward (Direct dependency)";
+                        connectionsContainer.appendChild(title);
+
+                        outputConnections.forEach(c => {
+                            const targetId = c.target.id || c.target;
+                            const targetModel = contentModels.find(m => m.id === targetId);
+                            if (!targetModel) return;
+
+                            const item = document.createElement("div");
+                            item.className = "flex items-center justify-between p-1.5 rounded bg-white border border-slate-200 text-xs hover:border-indigo-400 cursor-pointer transition font-medium";
+                            item.onclick = (e) => { e.stopPropagation(); selectNodeById(targetId); };
+                            item.innerHTML = `
+                                <span class="text-slate-700">${targetModel.name}</span>
+                                <span class="text-[9px] text-slate-400 font-mono italic font-semibold">${c.type}</span>
+                            `;
+                            connectionsContainer.appendChild(item);
+                        });
+                    }
+
+                    if (inputConnections.length > 0) {
+                        const title = document.createElement("div");
+                        title.className = "text-[9px] text-slate-400 font-bold uppercase mt-3 mb-1";
+                        title.textContent = "Referenced By (Parent containers)";
+                        connectionsContainer.appendChild(title);
+
+                        inputConnections.forEach(c => {
+                            const sourceId = c.source.id || c.source;
+                            const sourceModel = contentModels.find(m => m.id === sourceId);
+                            if (!sourceModel) return;
+
+                            const item = document.createElement("div");
+                            item.className = "flex items-center justify-between p-1.5 rounded bg-white border border-slate-200 text-xs hover:border-indigo-400 cursor-pointer transition font-medium";
+                            item.onclick = (e) => { e.stopPropagation(); selectNodeById(sourceId); };
+                            item.innerHTML = `
+                                <span class="text-slate-700">${sourceModel.name}</span>
+                                <span class="text-[9px] text-slate-400 font-mono italic font-semibold">${c.type}</span>
+                            `;
+                            connectionsContainer.appendChild(item);
+                        });
+                    }
+                }
+            }
+
+            const jsonCodeElement = document.getElementById("detail-json-code");
+            if (jsonCodeElement) {
+                jsonCodeElement.innerHTML = syntaxHighlightJson(model);
+            }
+
+            toggleRightSidebar(true);
+        }
+
+        function copySelectedNodeTitle() {
+            if (!selectedNode) return;
+            const textToCopy = selectedNode.name;
+            const textarea = document.createElement('textarea');
+            textarea.value = textToCopy;
+            textarea.style.position = 'fixed';
+            textarea.style.top = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                const badge = document.getElementById("copy-toast-badge");
+                const copyBtn = document.getElementById("copy-title-btn");
+                if (badge) {
+                    badge.classList.remove("hidden");
+                    setTimeout(() => badge.classList.add("hidden"), 1500);
+                }
+                if (copyBtn) {
+                    copyBtn.classList.remove("text-slate-400", "hover:text-indigo-600");
+                    copyBtn.classList.add("text-emerald-500", "bg-emerald-50");
+                    setTimeout(() => {
+                        copyBtn.classList.add("text-slate-400", "hover:text-indigo-600");
+                        copyBtn.classList.remove("text-emerald-500", "bg-emerald-50");
+                    }, 1500);
+                }
+            } catch (err) {
+                console.error('Could not copy title: ', err);
+            }
+            document.body.removeChild(textarea);
+        }
+
+        function copySelectedNodeJson() {
+            if (!selectedNode) return;
+            const textToCopy = JSON.stringify(selectedNode, null, 2);
+            
+            const highlighted = syntaxHighlightJson(textToCopy);
+            const richHtml = `<pre style="background-color:#0f172a;color:#f8fafc;padding:12px;border-radius:8px;font-family:'Fira Code',monospace;font-size:12px;line-height:1.5;"><code>${highlighted}</code></pre>`;
+            
+            const onCopy = (e) => {
+                e.clipboardData.setData('text/plain', textToCopy);
+                e.clipboardData.setData('text/html', richHtml);
+                e.preventDefault();
+            };
+            
+            document.addEventListener('copy', onCopy);
+            document.execCommand('copy');
+            document.removeEventListener('copy', onCopy);
+
+            const copyJsonBtn = document.getElementById("copy-json-btn");
+            if (copyJsonBtn) {
+                const originalText = copyJsonBtn.innerHTML;
+                copyJsonBtn.innerHTML = `
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    <span>Copied!</span>
+                `;
+                copyJsonBtn.classList.remove("text-indigo-600", "bg-indigo-50", "border-indigo-200");
+                copyJsonBtn.classList.add("text-emerald-600", "bg-emerald-50", "border-emerald-200");
+                setTimeout(() => {
+                    copyJsonBtn.innerHTML = originalText;
+                    copyJsonBtn.classList.add("text-indigo-600", "bg-indigo-50", "border-indigo-200");
+                    copyJsonBtn.classList.remove("text-emerald-600", "bg-emerald-50", "border-emerald-200");
+                }, 1500);
+            }
+        }
+
+        function copySelectedNodeSelection() {
+            const selection = window.getSelection();
+            if (!selection || selection.isCollapsed) return;
+
+            const selectedText = selection.toString();
+            const richHtml = `<code style="font-family:'Fira Code',monospace;font-size:11px;background-color:#f1f5f9;color:#0f172a;padding:2px 4px;border-radius:4px;white-space:pre-wrap;">${selectedText.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code>`;
+
+            const onCopy = (e) => {
+                e.clipboardData.setData('text/plain', selectedText);
+                e.clipboardData.setData('text/html', richHtml);
+                e.preventDefault();
+            };
+
+            document.addEventListener('copy', onCopy);
+            document.execCommand('copy');
+            document.removeEventListener('copy', onCopy);
+
+            const copySelectBtn = document.getElementById("copy-select-btn");
+            if (copySelectBtn) {
+                const originalHtml = copySelectBtn.innerHTML;
+                copySelectBtn.innerHTML = `
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    <span>Copied Selection!</span>
+                `;
+                copySelectBtn.classList.remove("text-indigo-600", "bg-indigo-50", "border-indigo-200");
+                copySelectBtn.classList.add("text-emerald-600", "bg-emerald-50", "border-emerald-200");
+                setTimeout(() => {
+                    copySelectBtn.innerHTML = originalHtml;
+                    copySelectBtn.classList.add("text-indigo-600", "bg-indigo-50", "border-indigo-200");
+                    copySelectBtn.classList.remove("text-emerald-600", "bg-emerald-50", "border-emerald-200");
+                }, 1500);
+            }
+        }
+
+        // Search and visual categories filters event routing
+        function setupEventListeners() {
+            if (searchInput) {
+                searchInput.oninput = (e) => {
+                    searchQuery = e.target.value;
+                    renderDirectory();
+                    filterNetworkByQuery();
+                };
+            }
+
+            if (categoryPillsContainer) {
+                categoryPillsContainer.addEventListener("click", (e) => {
+                    const button = e.target.closest(".filter-pill");
+                    if (!button) return;
+
+                    const type = button.getAttribute("data-type");
+                    const typesList = ["page", "structural", "component", "seo", "global_field", "utility"];
+
+                    if (e.altKey) {
+                        activeTypes.clear();
+                        activeTypes.add(type);
+                    } else if (e.shiftKey) {
+                        const clickedIdx = typesList.indexOf(type);
+                        const activeIndices = [];
+                        typesList.forEach((t, index) => {
+                            if (activeTypes.has(t)) {
+                                activeIndices.push(index);
+                            }
+                        });
+
+                        if (activeIndices.length > 0) {
+                            let farthestIdx = activeIndices[0];
+                            let maxDist = Math.abs(clickedIdx - farthestIdx);
+
+                            activeIndices.forEach(idx => {
+                                const dist = Math.abs(clickedIdx - idx);
+                                if (dist > maxDist) {
+                                    maxDist = dist;
+                                    farthestIdx = idx;
+                                }
+                            });
+
+                            const start = Math.min(clickedIdx, farthestIdx);
+                            const end = Math.max(clickedIdx, farthestIdx);
+
+                            for (let i = start; i <= end; i++) {
+                                activeTypes.add(typesList[i]);
+                            }
+                        } else {
+                            activeTypes.add(type);
+                        }
+                    } else {
+                        if (activeTypes.has(type)) {
+                            activeTypes.delete(type);
+                        } else {
+                            activeTypes.add(type);
+                        }
+                    }
+
+                    renderCategoryPills();
+                    renderDirectory();
+                    filterNetworkByQuery();
+                });
+            }
+
+            const filterAllBtn = document.getElementById("filter-all");
+            if (filterAllBtn) {
+                filterAllBtn.onclick = () => {
+                    const allTypes = ["page", "structural", "component", "seo", "global_field", "utility"];
+                    allTypes.forEach(t => activeTypes.add(t));
+                    renderCategoryPills();
+                    renderDirectory();
+                    filterNetworkByQuery();
+                };
+            }
+
+            const filterNoneBtn = document.getElementById("filter-none");
+            if (filterNoneBtn) {
+                filterNoneBtn.onclick = () => {
+                    activeTypes.clear();
+                    renderCategoryPills();
+                    renderDirectory();
+                    filterNetworkByQuery();
+                };
+            }
+
+            const detailTitle = document.getElementById("detail-title");
+            const copyTitleBtn = document.getElementById("copy-title-btn");
+            const copyJsonBtn = document.getElementById("copy-json-btn");
+            const copySelectBtn = document.getElementById("copy-select-btn");
+            if (detailTitle) detailTitle.onclick = copySelectedNodeTitle;
+            if (copyTitleBtn) copyTitleBtn.onclick = copySelectedNodeTitle;
+            if (copyJsonBtn) copyJsonBtn.onclick = copySelectedNodeJson;
+            if (copySelectBtn) copySelectBtn.onclick = copySelectedNodeSelection;
+
+            document.addEventListener('selectionchange', () => {
+                const selection = window.getSelection();
+                const codeElement = document.getElementById('detail-json-code');
+                const copyBtn = document.getElementById('copy-select-btn');
+                
+                if (!selection || selection.isCollapsed || !codeElement || !copyBtn) {
+                    if (copyBtn) copyBtn.classList.add('hidden');
+                    return;
+                }
+
+                if (codeElement.contains(selection.anchorNode) && codeElement.contains(selection.focusNode)) {
+                    copyBtn.classList.remove('hidden');
+                } else {
+                    copyBtn.classList.add('hidden');
+                }
+            });
+
+            if (traceSource) traceSource.onchange = updateTraceButtonState;
+            if (traceTarget) traceTarget.onchange = updateTraceButtonState;
+
+            if (traceBtn) {
+                traceBtn.onclick = () => {
+                    const src = traceSource.value;
+                    const tgt = traceTarget.value;
+                    if (!src || !tgt) return;
+
+                    traceRoutePath(src, tgt);
+                };
+            }
+
+            if (traceResetBtn) {
+                traceResetBtn.onclick = () => {
+                    resetTraceRoute();
+                };
+            }
+            
+            // Canvas zoom controls
+            const zoomInBtn = document.getElementById("zoom-in");
+            const zoomOutBtn = document.getElementById("zoom-out");
+            const zoomFitBtn = document.getElementById("zoom-fit");
+            const svgElement = d3.select("#network-svg");
+            
+            if(zoomInBtn && zoom) {
+                zoomInBtn.onclick = () => svgElement.transition().call(zoom.scaleBy, 1.3);
+            }
+            if(zoomOutBtn && zoom) {
+                zoomOutBtn.onclick = () => svgElement.transition().call(zoom.scaleBy, 1 / 1.3);
+            }
+            if(zoomFitBtn && zoom) {
+                zoomFitBtn.onclick = () => {
+                    const container = document.getElementById("canvas-container");
+                    if(container) {
+                        const rectBounds = container.getBoundingClientRect();
+                        svgElement.transition().duration(750).call(
+                            zoom.transform,
+                            d3.zoomIdentity.translate(rectBounds.width / 2 - 200, rectBounds.height / 2 - 50).scale(0.55)
+                        );
+                    }
+                }
+            }
+        }
+
+        // Path Tracer Algorithm
+        function traceRoutePath(sourceId, targetId) {
+            const adjList = {};
+            contentModels.forEach(m => adjList[m.id] = []);
+
+            modelConnections.forEach(c => {
+                const src = c.source.id || c.source;
+                const tgt = c.target.id || c.target;
+                if(adjList[src]) adjList[src].push(tgt);
+                if(adjList[tgt]) adjList[tgt].push(src);
+            });
+
+            const queue = [[sourceId]];
+            const visited = new Set([sourceId]);
+            let targetPath = null;
+
+            while (queue.length > 0) {
+                const path = queue.shift();
+                const node = path[path.length - 1];
+
+                if (node === targetId) {
+                    targetPath = path;
+                    break;
+                }
+
+                const neighbors = adjList[node] || [];
+                for (let neighbor of neighbors) {
+                    if (!visited.has(neighbor)) {
+                        visited.add(neighbor);
+                        queue.push([...path, neighbor]);
+                    }
+                }
+            }
+
+            if (targetPath) {
+                const pathNodes = new Set(targetPath);
+                
+                nodeElements.style("opacity", d => {
+                    if (!activeTypes.has(d.type)) return 0;
+                    return pathNodes.has(d.id) ? 1 : 0.08;
+                });
+                textElements.style("opacity", d => {
+                    if (!activeTypes.has(d.type)) return 0;
+                    return pathNodes.has(d.id) ? 1 : 0.08;
+                });
+
+                linkElements
+                    .style("opacity", l => {
+                        const s = l.source.id || l.source;
+                        const t = l.target.id || l.target;
+                        
+                        const srcType = contentModels.find(m => m.id === s)?.type;
+                        const tgtType = contentModels.find(m => m.id === t)?.type;
+                        if (!activeTypes.has(srcType) || !activeTypes.has(tgtType)) return 0;
+
+                        const idxS = targetPath.indexOf(s);
+                        const idxT = targetPath.indexOf(t);
+                        const isAlongPath = idxS !== -1 && idxT !== -1 && Math.abs(idxS - idxT) === 1;
+                        return isAlongPath ? 1 : 0.03;
+                    })
+                    .attr("stroke-width", l => {
+                        const s = l.source.id || l.source;
+                        const t = l.target.id || l.target;
+                        const idxS = targetPath.indexOf(s);
+                        const idxT = targetPath.indexOf(t);
+                        const isAlongPath = idxS !== -1 && idxT !== -1 && Math.abs(idxS - idxT) === 1;
+                        return isAlongPath ? 4.5 : 2;
+                    })
+                    .attr("stroke", l => {
+                        const s = l.source.id || l.source;
+                        const t = l.target.id || l.target;
+                        const idxS = targetPath.indexOf(s);
+                        const idxT = targetPath.indexOf(t);
+                        const isAlongPath = idxS !== -1 && idxT !== -1 && Math.abs(idxS - idxT) === 1;
+                        return isAlongPath ? "#ea580c" : "#4f46e5";
+                    })
+                    .classed("active-path", l => {
+                        const s = l.source.id || l.source;
+                        const t = l.target.id || l.target;
+                        const idxS = targetPath.indexOf(s);
+                        const idxT = targetPath.indexOf(t);
+                        return idxS !== -1 && idxT !== -1 && Math.abs(idxS - idxT) === 1;
+                    });
+
+                if (traceResetBtn) traceResetBtn.classList.remove("hidden");
+            } else {
+                const tipBar = document.getElementById("quick-tip-bar");
+                if(tipBar) {
+                    tipBar.innerHTML = `<span class="text-rose-600 font-bold">⚠️ Trace Route Failed:</span> No connections found between <b class="text-slate-900">${sourceId}</b> and <b class="text-slate-900">${targetId}</b>.`;
+                    setTimeout(() => {
+                        tipBar.innerHTML = `
+                            <div class="flex items-center gap-2 font-medium">
+                                <span>Hover or click elements to analyze details.</span>
+                            </div>
+                        `;
+                    }, 5000);
+                }
+            }
+        }
+
+        // Reset tracers
+        function resetTraceRoute() {
+            nodeElements.style("opacity", d => activeTypes.has(d.type) ? 1 : 0);
+            textElements.style("opacity", d => activeTypes.has(d.type) ? 1 : 0);
+            linkElements
+                .style("opacity", l => {
+                    const s = l.source.id || l.source;
+                    const t = l.target.id || l.target;
+                    const srcType = contentModels.find(m => m.id === s)?.type;
+                    const tgtType = contentModels.find(m => m.id === t)?.type;
+                    return (activeTypes.has(srcType) && activeTypes.has(tgtType)) ? 0.45 : 0;
+                })
+                .attr("stroke-width", d => d.type === 'global_field' ? 1.5 : 2)
+                .attr("stroke", d => d.type === 'global_field' ? '#f43f5e' : '#4f46e5')
+                .classed("active-path", false);
+
+            if (traceSource) traceSource.value = "";
+            if (traceTarget) traceTarget.value = "";
+            if (traceResetBtn) traceResetBtn.classList.add("hidden");
+            updateTraceButtonState();
+        }
+
+        // Dynamic network visualization search layout filter
+        function filterNetworkByQuery() {
+            const matchingNodeIds = new Set(
+                contentModels.filter(m => {
+                    const matchesCat = activeTypes.has(m.type);
+                    const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                          m.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                          m.description.toLowerCase().includes(searchQuery.toLowerCase());
+                    return matchesCat && matchesSearch;
+                }).map(m => m.id)
+            );
+
+            nodeElements.style("opacity", d => matchingNodeIds.has(d.id) ? 1 : 0);
+            nodeElements.style("pointer-events", d => matchingNodeIds.has(d.id) ? "auto" : "none");
+            textElements.style("opacity", d => matchingNodeIds.has(d.id) ? 1 : 0);
+            
+            linkElements.style("opacity", l => {
+                const s = l.source.id || l.source;
+                const t = l.target.id || l.target;
+                return matchingNodeIds.has(s) && matchingNodeIds.has(t) ? 0.45 : 0;
+            });
+
+            updateActiveFilterToast();
+        }
+
+        // Active filter notification toast updates
+        function updateActiveFilterToast() {
+            const toast = document.getElementById("filter-toast");
+            const text = document.getElementById("filter-toast-text");
+            if (!toast || !text) return;
+
+            const activeCount = activeTypes.size;
+            const totalCount = 6; 
+
+            if (activeCount < totalCount) {
+                const names = Array.from(activeTypes).map(t => t.split('_').join(' ')).join(', ');
+                text.innerHTML = `Active Filters: <strong class="text-indigo-300 font-bold font-mono text-[10px]">${names || 'None'}</strong>`;
+                toast.classList.remove("opacity-0", "pointer-events-none");
+                toast.classList.add("opacity-100");
+            } else {
+                toast.classList.remove("opacity-100");
+                toast.classList.add("opacity-0", "pointer-events-none");
+            }
+        }
+
+        // Initialization
+        window.onload = function() {
+            runSemanticMatchingEngine();
+            updateStatsCounters();
+            populateTraceSelects();
+            renderCategoryPills();
+            renderDirectory();
+            initD3Graph();
+            setupEventListeners();
+            updateTraceButtonState();
+
+            if (window.innerWidth < 1024) {
+                toggleLeftSidebar(false);
+                toggleRightSidebar(false);
+            } else {
+                toggleLeftSidebar(true);
+                toggleRightSidebar(true);
+            }
+        };
+    </script>
+</body>
+</html>
