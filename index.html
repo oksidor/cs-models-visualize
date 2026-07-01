@@ -844,79 +844,6 @@
             }
         ];
 
-        // Define relationship connections mapping out the graph links
-        const modelConnections = [
-            // Catalogue page linkages
-            { source: "catalogue_page", target: "seo_page_data", type: "reference" },
-            { source: "catalogue_page", target: "catalogue_page_content", type: "reference" },
-            
-            // Catalogue Page content linkages
-            { source: "catalogue_page_content", target: "hero_view", type: "reference" },
-            { source: "catalogue_page_content", target: "promo_view", type: "reference" },
-            { source: "catalogue_page_content", target: "category_cards_view", type: "reference" },
-            { source: "catalogue_page_content", target: "product_grid_view", type: "reference" },
-            { source: "catalogue_page_content", target: "lookbook_view", type: "reference" },
-
-            // PDP linkages
-            { source: "pdp_page", target: "seo_pdp_global_template", type: "reference" },
-            { source: "pdp_page", target: "pdp_content", type: "reference" },
-            { source: "pdp_page", target: "pdp_global_items", type: "reference" },
-
-            // PDP content mapping
-            { source: "pdp_content", target: "pdp_shipping_banner_view", type: "reference" },
-            { source: "pdp_content", target: "pdp_payment_message", type: "reference" },
-            { source: "pdp_content", target: "pdp_content_spot_atb_view", type: "reference" },
-
-            // Category card trees
-            { source: "category_cards_view", target: "category_cards_nested_view", type: "reference" },
-            { source: "category_cards_nested_view", target: "category_cards_nested_item_view", type: "reference" },
-            { source: "category_cards_nested_view", target: "category_label", type: "reference" },
-
-            // Lookbook trees
-            { source: "lookbook_view", target: "shop_the_look_view", type: "reference" },
-            { source: "shop_the_look_view", target: "product_picker", type: "global_field" },
-
-            // Global configurations
-            { source: "site_global_items", target: "header_view", type: "reference" },
-            { source: "site_global_items", target: "footer_view", type: "reference" },
-            { source: "site_global_items", target: "theme", type: "global_field" },
-            { source: "site_global_items", target: "app_global", type: "reference" },
-
-            // Navigation details
-            { source: "header_view", target: "header_config", type: "reference" },
-            { source: "header_view", target: "menu_links_view", type: "reference" },
-            { source: "header_view", target: "drop_navigation_view", type: "reference" },
-            { source: "header_view", target: "sub_theme", type: "global_field" },
-
-            // Footers
-            { source: "footer_view", target: "newsletter_footer_signup_view", type: "reference" },
-            { source: "footer_view", target: "hyperlink", type: "reference" },
-            { source: "footer_view", target: "view_types", type: "global_field" },
-
-            // Generic utility elements connected to Global Fields
-            { source: "hero_view", target: "cta", type: "global_field" },
-            { source: "hero_view", target: "responsive_image", type: "global_field" },
-            { source: "hero_view", target: "text_alignment", type: "global_field" },
-            { source: "hero_view", target: "wrapper_settings", type: "global_field" },
-            { source: "hero_view", target: "tagged_title", type: "global_field" },
-            { source: "hero_view", target: "breakpoint_booleans", type: "global_field" },
-
-            { source: "promo_view", target: "cta", type: "global_field" },
-            { source: "promo_view", target: "tagged_title", type: "global_field" },
-            { source: "promo_view", target: "wrapper_settings", type: "global_field" },
-
-            { source: "category_cards_nested_item_view", target: "responsive_image", type: "global_field" },
-
-            { source: "seo_page_data", target: "analytics", type: "global_field" },
-            { source: "seo_page_data", target: "breakpoint_booleans", type: "global_field" },
-
-            { source: "gift_card_page", target: "seo_page_data", type: "reference" },
-            { source: "gift_card_page", target: "hero_view", type: "reference" },
-
-            { source: "content_page", target: "seo_page_data", type: "reference" },
-            { source: "content_page", target: "hero_view", type: "reference" }
-        ];
-
         // Secondary raw content list mapped as utilities or supplementary components
         const unmappedRawNames = [
             "promo_view_wysiwyg", "dynamic_module_nested_view", "_test_catalogue_page_content", 
@@ -1006,7 +933,7 @@
         let leftSidebarOpen = true;
         let rightSidebarOpen = true;
 
-        // Color mappings refined for light backgrounds to ensure optimal contrast (strictly single declaration)
+        // Color mappings refined for light backgrounds to ensure optimal contrast
         const categoryColors = {
             page: { fill: "#10b981", stroke: "#047857", light: "#047857", bg: "#ecfdf5", label: "Page", border: "border-emerald-200", ring: "ring-emerald-500" },
             structural: { fill: "#3b82f6", stroke: "#1d4ed8", light: "#1d4ed8", bg: "#eff6ff", label: "Structure", border: "border-blue-200", ring: "ring-blue-500" },
@@ -1021,7 +948,7 @@
         const dirCount = document.getElementById("directory-count");
         const detailsPlaceholder = document.getElementById("details-placeholder");
         const detailsActive = document.getElementById("details-active");
-        const searchInput = document.getElementById("search-input");
+        const searchQueryInput = document.getElementById("search-input");
         const categoryPillsContainer = document.getElementById("category-filter-pills");
         const traceSource = document.getElementById("trace-source");
         const traceTarget = document.getElementById("trace-target");
@@ -1032,7 +959,7 @@
         // Gemini API Configuration
         const apiKey = ""; // Runtime provided
 
-        // Gemini API caller implementing retry backoff (5 attempts: 1s, 2s, 4s, 8s, 16s)
+        // Gemini API caller implementing retry backoff
         async function callGemini(prompt, systemInstruction = "") {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
             const payload = {
@@ -1131,7 +1058,69 @@
         function runSemanticMatchingEngine() {
             const connectionsSet = new Set();
             
-            modelConnections.forEach(c => {
+            // Register existing hardcoded connections
+            const baseConnections = [
+                // Catalogue page linkages
+                { source: "catalogue_page", target: "seo_page_data", type: "reference" },
+                { source: "catalogue_page", target: "catalogue_page_content", type: "reference" },
+                // Catalogue Page content linkages
+                { source: "catalogue_page_content", target: "hero_view", type: "reference" },
+                { source: "catalogue_page_content", target: "promo_view", type: "reference" },
+                { source: "catalogue_page_content", target: "category_cards_view", type: "reference" },
+                { source: "catalogue_page_content", target: "product_grid_view", type: "reference" },
+                { source: "catalogue_page_content", target: "lookbook_view", type: "reference" },
+                // PDP linkages
+                { source: "pdp_page", target: "seo_pdp_global_template", type: "reference" },
+                { source: "pdp_page", target: "pdp_content", type: "reference" },
+                { source: "pdp_page", target: "pdp_global_items", type: "reference" },
+                // PDP content mapping
+                { source: "pdp_content", target: "pdp_shipping_banner_view", type: "reference" },
+                { source: "pdp_content", target: "pdp_payment_message", type: "reference" },
+                { source: "pdp_content", target: "pdp_content_spot_atb_view", type: "reference" },
+                // Category card trees
+                { source: "category_cards_view", target: "category_cards_nested_view", type: "reference" },
+                { source: "category_cards_nested_view", target: "category_cards_nested_item_view", type: "reference" },
+                { source: "category_cards_nested_view", target: "category_label", type: "reference" },
+                // Lookbook trees
+                { source: "lookbook_view", target: "shop_the_look_view", type: "reference" },
+                { source: "shop_the_look_view", target: "product_picker", type: "global_field" },
+                // Global configurations
+                { source: "site_global_items", target: "header_view", type: "reference" },
+                { source: "site_global_items", target: "footer_view", type: "reference" },
+                { source: "site_global_items", target: "theme", type: "global_field" },
+                { source: "site_global_items", target: "app_global", type: "reference" },
+                // Navigation details
+                { source: "header_view", target: "header_config", type: "reference" },
+                { source: "header_view", target: "menu_links_view", type: "reference" },
+                { source: "header_view", target: "drop_navigation_view", type: "reference" },
+                { source: "header_view", target: "sub_theme", type: "global_field" },
+                // Footers
+                { source: "footer_view", target: "newsletter_footer_signup_view", type: "reference" },
+                { source: "footer_view", target: "hyperlink", type: "reference" },
+                { source: "footer_view", target: "view_types", type: "global_field" },
+                // Generic utility elements connected to Global Fields
+                { source: "hero_view", target: "cta", type: "global_field" },
+                { source: "hero_view", target: "responsive_image", type: "global_field" },
+                { source: "hero_view", target: "text_alignment", type: "global_field" },
+                { source: "hero_view", target: "wrapper_settings", type: "global_field" },
+                { source: "hero_view", target: "tagged_title", type: "global_field" },
+                { source: "hero_view", target: "breakpoint_booleans", type: "global_field" },
+                { source: "promo_view", target: "cta", type: "global_field" },
+                { source: "promo_view", target: "tagged_title", type: "global_field" },
+                { source: "promo_view", target: "wrapper_settings", type: "global_field" },
+                { source: "category_cards_nested_item_view", target: "responsive_image", type: "global_field" },
+                { source: "seo_page_data", target: "analytics", type: "global_field" },
+                { source: "seo_page_data", target: "breakpoint_booleans", type: "global_field" },
+                { source: "gift_card_page", target: "seo_page_data", type: "reference" },
+                { source: "gift_card_page", target: "hero_view", type: "reference" },
+                { source: "content_page", target: "seo_page_data", type: "reference" },
+                { source: "content_page", target: "hero_view", type: "reference" }
+            ];
+
+            // Define the global modelConnections variable using window so it's accessible across functions
+            window.modelConnections = baseConnections;
+
+            baseConnections.forEach(c => {
                 const srcId = c.source;
                 const tgtId = c.target;
                 connectionsSet.add(`${srcId}➔${tgtId}`);
@@ -1144,7 +1133,7 @@
                 
                 connectionsSet.add(key);
                 
-                modelConnections.push({
+                window.modelConnections.push({
                     source: sourceId,
                     target: targetId,
                     type: connectionType
@@ -1331,7 +1320,7 @@
             const sRel = document.getElementById("stat-relations");
             if (sTotal) sTotal.textContent = contentModels.length;
             if (sComp) sComp.textContent = contentModels.filter(m => m.type !== 'global_field').length;
-            if (sRel) sRel.textContent = modelConnections.length;
+            if (sRel && window.modelConnections) sRel.textContent = window.modelConnections.length;
         }
 
         // Fill Trace Selection dropdowns
@@ -1395,7 +1384,6 @@
                     sidebar.style.bottom = "0.75rem";
                 }
                 if (content) content.classList.remove("hidden");
-                // Expanded -> invite to collapse by pointing UP
                 if (chevron) chevron.classList.add("rotate-180");
             } else {
                 if (sidebar) {
@@ -1405,10 +1393,6 @@
                 if (content) content.classList.add("hidden");
                 // Collapsed -> invite to expand by pointing DOWN
                 if (chevron) chevron.classList.remove("rotate-180");
-            }
-
-            if (topControlsBar) {
-                topControlsBar.style.left = leftSidebarOpen ? "320px" : "0px";
             }
 
             setTimeout(updateSimulationCenter, 310);
@@ -1432,7 +1416,6 @@
                     panel.style.bottom = "0.75rem";
                 }
                 if (content) content.classList.remove("hidden");
-                // Expanded -> invite to collapse by pointing UP
                 if (chevron) chevron.classList.add("rotate-180");
             } else {
                 if (panel) {
@@ -1442,10 +1425,6 @@
                 if (content) content.classList.add("hidden");
                 // Collapsed -> invite to expand by pointing DOWN
                 if (chevron) chevron.classList.remove("rotate-180");
-            }
-
-            if (topControlsBar) {
-                topControlsBar.style.right = rightSidebarOpen ? "384px" : "0px";
             }
 
             setTimeout(updateSimulationCenter, 310);
@@ -1472,9 +1451,14 @@
         function renderDirectory() {
             const filtered = contentModels.filter(m => {
                 const matchesCat = activeTypes.has(m.type);
-                const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                      m.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                      m.description.toLowerCase().includes(searchQuery.toLowerCase());
+                const q = searchQuery.toLowerCase();
+                const matchesSearch = m.name.toLowerCase().includes(q) || 
+                                      m.id.toLowerCase().includes(q) ||
+                                      m.description.toLowerCase().includes(q) ||
+                                      (m.fields && m.fields.some(f => 
+                                          f.name.toLowerCase().includes(q) || 
+                                          (f.label && f.label.toLowerCase().includes(q))
+                                      ));
                 return matchesCat && matchesSearch;
             }).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -1497,9 +1481,9 @@
                 const itemDiv = document.createElement("div");
                 const isSelected = selectedNode?.id === m.id;
                 
-                const connectionCount = modelConnections.filter(c => 
+                const connectionCount = window.modelConnections ? window.modelConnections.filter(c => 
                     (c.source.id || c.source) === m.id || (c.target.id || c.target) === m.id
-                ).length;
+                ).length : 0;
 
                 itemDiv.className = `p-2 rounded-lg border cursor-pointer transition flex flex-col gap-1 ${
                     isSelected 
@@ -1582,7 +1566,8 @@
                 fy: null
             }));
 
-            const links = modelConnections.map(c => ({
+            // Use the global connections array populated in runSemanticMatchingEngine
+            const links = (window.modelConnections || []).map(c => ({
                 source: c.source,
                 target: c.target,
                 type: c.type
@@ -1773,7 +1758,7 @@
             const linkedNodeIds = new Set();
             linkedNodeIds.add(nodeId);
 
-            modelConnections.forEach(c => {
+            (window.modelConnections || []).forEach(c => {
                 if (c.source === nodeId || c.source.id === nodeId) {
                     linkedNodeIds.add(c.target.id || c.target);
                 }
@@ -1833,7 +1818,7 @@
 
             const detailConnCountEl = document.getElementById("detail-connections-count");
             if (detailConnCountEl) {
-                const connectionCount = modelConnections.filter(c => 
+                const connectionCount = (window.modelConnections || []).filter(c => 
                     (c.source.id || c.source) === model.id || (c.target.id || c.target) === model.id
                 ).length;
                 detailConnCountEl.textContent = connectionCount;
@@ -1897,8 +1882,8 @@
             if (connectionsContainer) {
                 connectionsContainer.innerHTML = "";
 
-                const inputConnections = modelConnections.filter(c => (c.target.id || c.target) === nodeId);
-                const outputConnections = modelConnections.filter(c => (c.source.id || c.source) === nodeId);
+                const inputConnections = (window.modelConnections || []).filter(c => (c.target.id || c.target) === nodeId);
+                const outputConnections = (window.modelConnections || []).filter(c => (c.source.id || c.source) === nodeId);
 
                 if (inputConnections.length === 0 && outputConnections.length === 0) {
                     connectionsContainer.innerHTML = `
@@ -2070,8 +2055,8 @@
 
         // Search and visual categories filters event routing
         function setupEventListeners() {
-            if (searchInput) {
-                searchInput.oninput = (e) => {
+            if (searchQueryInput) {
+                searchQueryInput.oninput = (e) => {
                     searchQuery = e.target.value;
                     renderDirectory();
                     filterNetworkByQuery();
@@ -2230,7 +2215,7 @@
             const adjList = {};
             contentModels.forEach(m => adjList[m.id] = []);
 
-            modelConnections.forEach(c => {
+            (window.modelConnections || []).forEach(c => {
                 const src = c.source.id || c.source;
                 const tgt = c.target.id || c.target;
                 if(adjList[src]) adjList[src].push(tgt);
@@ -2352,9 +2337,14 @@
             const matchingNodeIds = new Set(
                 contentModels.filter(m => {
                     const matchesCat = activeTypes.has(m.type);
-                    const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                          m.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                          m.description.toLowerCase().includes(searchQuery.toLowerCase());
+                    const q = searchQuery.toLowerCase();
+                    const matchesSearch = m.name.toLowerCase().includes(q) || 
+                                          m.id.toLowerCase().includes(q) ||
+                                          m.description.toLowerCase().includes(q) ||
+                                          (m.fields && m.fields.some(f => 
+                                              f.name.toLowerCase().includes(q) || 
+                                              (f.label && f.label.toLowerCase().includes(q))
+                                          ));
                     return matchesCat && matchesSearch;
                 }).map(m => m.id)
             );
