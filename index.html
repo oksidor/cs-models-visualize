@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2291,11 +2292,22 @@
                                     </h4>`;
 
                     assessmentData.dimensions.forEach(dim => {
+                        // Extract numerical score from "X/10" string to determine badge color
+                        let score = parseInt(dim.rating.split('/')[0], 10);
+                        let badgeColorCls = "bg-slate-100 text-slate-600 border-slate-200"; // fallback
+                        
+                        if (!isNaN(score)) {
+                            if (score <= 3) badgeColorCls = "bg-rose-100 text-rose-700 border-rose-200";
+                            else if (score <= 6) badgeColorCls = "bg-amber-100 text-amber-700 border-amber-200";
+                            else if (score <= 8) badgeColorCls = "bg-lime-100 text-lime-700 border-lime-200";
+                            else badgeColorCls = "bg-emerald-100 text-emerald-700 border-emerald-200";
+                        }
+
                         domainsHtml += `
                             <div class="bg-white border border-slate-200 rounded-lg p-3 shadow-sm transition-all hover:border-slate-300">
                                 <div class="flex justify-between items-center mb-2">
                                     <h5 class="text-[10px] font-bold text-slate-800 uppercase tracking-wider">${dim.name}</h5>
-                                    <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">${dim.rating}</span>
+                                    <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded border ${badgeColorCls}">${dim.rating}</span>
                                 </div>
                                 <div class="space-y-2 mt-2">
                                     <div class="flex items-start gap-1.5">
